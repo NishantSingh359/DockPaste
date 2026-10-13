@@ -1,15 +1,23 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEasingCurve, QPoint, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
-    QFormLayout,
-    QGroupBox,
+    QFrame,
+    QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from config import (
@@ -19,10 +27,86 @@ from config import (
     CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
     MAX_CHIPS_MIN,
     MAX_CHIPS_MAX,
-    SETTINGS_WINDOW_MIN_WIDTH,
     SHELF_WIDTH_RATIO_MAX,
     SHELF_WIDTH_RATIO_MIN,
 )
+import settings_config as appearance
+
+
+class SettingsNavRow(QWidget):
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._active = False
+        self._hovered = False
+        self._accent = QColor(appearance.PALETTE["accent"])
+        self._hover_color = QColor(appearance.PALETTE["surface_hover"])
+
+    def set_active(self, active):
+        self._active = bool(active)
+        self.update()
+
+    def set_colors(self, accent, hover_color):
+        self._accent = accent
+        self._hover_color = hover_color
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        if not self._active and not self._hovered:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self._accent if self._active else self._hover_color)
+        painter.drawRoundedRect(
+            self.rect().adjusted(*appearance.NAV_ROW_INSET),
+            appearance.NAV_ROW_RADIUS,
+            appearance.NAV_ROW_RADIUS,
+        )
+
+
+class SettingsNavIcon(QWidget):
+    """Consistent-size semantic line icon for a Settings section."""
+
+    def __init__(self, icon_name, parent=None):
+        super().__init__(parent)
+        self.icon_name = icon_name
+        self._active = False
+        self.setFixedSize(appearance.NAV_ICON_SIZE, appearance.NAV_ICON_SIZE)
+
+    def set_active(self, active):
+        if self._active != bool(active):
+            self._active = bool(active)
+            self.update()
+
+    def paintEvent(self, event):
+        color = appearance.PALETTE["white"] if self._active else appearance.PALETTE["secondary_text"]
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{appearance.NAV_ICON_VIEWBOX_SIZE}" height="{appearance.NAV_ICON_VIEWBOX_SIZE}" '
+            f'viewBox="0 0 {appearance.NAV_ICON_VIEWBOX_SIZE} {appearance.NAV_ICON_VIEWBOX_SIZE}" fill="none" stroke="{color}" '
+            f'stroke-width="{appearance.NAV_ICON_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">'
+            + appearance.NAV_ICON_PATHS[self.icon_name] + '</svg>'
+        )
+        renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter, self.rect())
 
 
 class SettingsDialog(QDialog):
@@ -69,40 +153,107 @@ class SettingsDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
-        self.theme = theme or {"settings": {}}
-        self.setWindowTitle(self.theme.get("settings", {}).get("window_title", "DockPaste Settings"))
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
-        self.setMinimumWidth(SETTINGS_WINDOW_MIN_WIDTH)
+        self.resize(*appearance.WINDOW_SIZE)
 
-        layout = QVBoxLayout(self)
-        settings_theme = self.theme.get("settings", {})
-        layout.setContentsMargins(*settings_theme.get("content_margins", [20, 18, 20, 16]))
-        layout.setSpacing(int(settings_theme.get("layout_spacing", 10)))
+        root = QHBoxLayout(self)
+        root.setContentsMargins(*appearance.ROOT_MARGINS)
+        root.setSpacing(appearance.ROOT_SPACING)
 
-        heading = QLabel("Preferences")
-        heading.setObjectName("settingsHeading")
-        layout.addWidget(heading)
+        self.sidebar = QListWidget()
+        self.sidebar.setObjectName("settingsSidebar")
+        self.sidebar.setFixedWidth(appearance.SIDEBAR_WIDTH)
+        self.sidebar.setSpacing(appearance.SIDEBAR_SPACING)
+        self.sidebar.setFrameShape(QFrame.NoFrame)
+        self.sidebar.setFocusPolicy(Qt.NoFocus)
+        self.sidebar.setUniformItemSizes(True)
+        self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.pages = QStackedWidget()
+        root.addWidget(self.sidebar)
+        root.addWidget(self.pages, 1)
 
-        theme_group = QGroupBox("Theme")
-        theme_form = QFormLayout(theme_group)
-        theme_form.setContentsMargins(12, 10, 12, 10)
-        theme_form.setHorizontalSpacing(12)
-        theme_form.setVerticalSpacing(8)
-        self.theme_combo = QComboBox()
+        self._nav_rows = []
+        self._nav_icons = []
+        for icon_name, page_name in (("general", "General"), ("appearance", "Appearance"), ("history", "History")):
+            self._add_nav_item(icon_name, page_name)
+        self.sidebar.currentRowChanged.connect(self._on_nav_changed)
+        self.sidebar.setCurrentRow(0)
+
+        general = self._new_page("General", "Choose how DockPaste behaves on your desktop.")
+        general_card = self._card(general)
+        self.show_on_hover = self._add_switch(
+            general_card, "Show Shelf on Hover", "Reveal the shelf when you move to the top edge of the screen.", show_on_hover, on_show_on_hover
+        )
+        self.hide_on_paste = self._add_switch(
+            general_card, "Hide Shelf After Pasting", "Dismiss the shelf after you choose a clip.", hide_on_paste, on_hide_on_paste
+        )
+        self.close_to_tray = self._add_switch(
+            general_card, "Keep Running When Closed", "Keep clipboard monitoring active from the system tray.", close_to_tray, on_close_to_tray
+        )
+        self.close_to_tray.setToolTip(
+            "Closing the shelf hides it in the system tray and keeps clipboard monitoring active. "
+            "The current history is cleared when the shelf is closed. Use Exit in the tray menu to quit."
+        )
+        self.start_with_windows = self._add_switch(
+            general_card, "Start With Windows", "Open DockPaste automatically when you sign in.", start_with_windows, on_start_with_windows
+        )
+        self.text_preview_on_double_click = self._add_switch(
+            general_card, "Preview Text on Double-Click", "Open a readable preview of copied text.", text_preview_on_double_click, on_text_preview_on_double_click
+        )
+        self.open_images_on_double_click = self._add_switch(
+            general_card, "Open Images on Double-Click", "Open the copied image in your image viewer.", open_images_on_double_click, on_open_images_on_double_click
+        )
+        self.prevent_oversize_items = self._add_switch(
+            general_card, "Skip Items Over 5 MB", "Keep large clipboard items out of local history.", prevent_oversize_items, on_prevent_oversize_items
+        )
+        self.oversize_warning = self._add_switch(
+            general_card, "Warn When an Item Is Skipped", "Show a notice when an item exceeds the size limit.", show_oversize_warning, on_oversize_warning
+        )
+        self.oversize_warning.setEnabled(bool(prevent_oversize_items))
+        self.prevent_oversize_items.toggled.connect(self._set_oversize_warning_availability)
+        self._add_page(general)
+
+        appearance_page = self._new_page("Appearance", "Adjust the shelf and the way clips are shown.")
+        appearance_card = self._card(appearance_page)
+        self.theme_combo = MacComboBox()
         for theme_id, display_name in available_themes:
             self.theme_combo.addItem(display_name, theme_id)
         self.theme_combo.setCurrentIndex(self.theme_combo.findData(theme_name))
-        self.theme_combo.currentIndexChanged.connect(lambda index: on_theme(self.theme_combo.itemData(index)))
-        theme_form.addRow("Theme", self.theme_combo)
-        layout.addWidget(theme_group)
-        layout.addSpacing(int(settings_theme.get("section_spacing", 18)))
+        self.theme_combo.currentIndexChanged.connect(
+            lambda index: on_theme(self.theme_combo.itemData(index))
+        )
+        self._add_control_row(appearance_card, "Color Theme", "Choose the color palette used by DockPaste.", self.theme_combo)
+        self.show_clip_indexes = self._add_switch(
+            appearance_card, "Show Clip Indexes", "Display the keyboard index on each clip.", show_clip_indexes, on_show_clip_indexes
+        )
+        self.color_preview = self._add_switch(
+            appearance_card, "Show Color Previews", "Show a swatch for copied color values.", color_preview_enabled, on_color_preview
+        )
 
-        history_group = QGroupBox("History")
-        history_form = QFormLayout(history_group)
-        history_form.setContentsMargins(12, 10, 12, 10)
-        history_form.setHorizontalSpacing(12)
-        history_form.setVerticalSpacing(8)
-        self.history_date_combo = QComboBox()
+        sizing_card = self._card(appearance_page)
+        self.chip_min_width = self._spin(chip_min_width, CHIP_WIDTH_MIN_LIMIT, CHIP_WIDTH_MAX_LIMIT, " px")
+        self.chip_min_width.valueChanged.connect(on_chip_min_width)
+        self._add_control_row(sizing_card, "Minimum Clip Width", "Smallest width used for a shelf clip.", self.chip_min_width)
+        self.chip_max_width = self._spin(chip_max_width, CHIP_WIDTH_MIN_LIMIT, CHIP_WIDTH_MAX_LIMIT, " px")
+        self.chip_max_width.valueChanged.connect(on_chip_max_width)
+        self._add_control_row(sizing_card, "Maximum Clip Width", "Longest width used before clip text is shortened.", self.chip_max_width)
+        self.max_chips = self._spin(max_chips, MAX_CHIPS_MIN, MAX_CHIPS_MAX)
+        self.max_chips.valueChanged.connect(on_max_chips)
+        self._add_control_row(sizing_card, "Maximum Clips", "Maximum number of visible clips in the shelf.", self.max_chips)
+        self.shelf_width_ratio = QDoubleSpinBox()
+        self.shelf_width_ratio.setRange(SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX)
+        self.shelf_width_ratio.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
+        self.shelf_width_ratio.setDecimals(2)
+        self.shelf_width_ratio.setSingleStep(0.01)
+        self.shelf_width_ratio.setValue(shelf_width_ratio)
+        self.shelf_width_ratio.valueChanged.connect(on_shelf_width_ratio)
+        self._add_control_row(sizing_card, "Shelf Width", "Shelf width as a proportion of the screen.", self.shelf_width_ratio)
+        self._add_page(appearance_page)
+
+        history = self._new_page("History", "Manage saved clipboard history.")
+        history_card = self._card(history)
+        self.history_date_combo = MacComboBox()
         for history_date in history_dates:
             self.history_date_combo.addItem(history_date, history_date)
         selected_index = self.history_date_combo.findData(selected_history_date)
@@ -110,234 +261,345 @@ class SettingsDialog(QDialog):
         self.history_date_combo.currentIndexChanged.connect(
             lambda index: on_history_date(self.history_date_combo.itemData(index))
         )
-        history_form.addRow("Copy Date", self.history_date_combo)
-        self.history_retention_days = QSpinBox()
-        self.history_retention_days.setRange(
+        self._add_control_row(history_card, "Browse Copy Date", "Show clips copied on this date.", self.history_date_combo)
+        self.history_retention_days = self._spin(
+            history_retention_days,
             CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
             CLIPBOARD_HISTORY_RETENTION_MAX_DAYS,
+            " days",
         )
-        self.history_retention_days.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.history_retention_days.setSuffix(" Days")
-        self.history_retention_days.setValue(history_retention_days)
         self.history_retention_days.valueChanged.connect(on_history_retention_days)
-        history_form.addRow("Delete History After", self.history_retention_days)
-        layout.addWidget(history_group)
-        layout.addSpacing(int(settings_theme.get("section_spacing", 18)))
-
-        self.show_on_hover = self._add_checkbox(
-            layout, "Show Shelf on Hover", show_on_hover, on_show_on_hover
-        )
-        self.hide_on_paste = self._add_checkbox(
-            layout, "Hide Shelf After Paste", hide_on_paste, on_hide_on_paste
-        )
-        self.show_clip_indexes = self._add_checkbox(
-            layout, "Show Clip Indexes", show_clip_indexes, on_show_clip_indexes
-        )
-        self.color_preview = self._add_checkbox(
-            layout, "Show Color Preview", color_preview_enabled, on_color_preview
-        )
-        self.text_preview_on_double_click = self._add_checkbox(
-            layout,
-            "Preview Text on Double-Click",
-            text_preview_on_double_click,
-            on_text_preview_on_double_click,
-        )
-        self.open_images_on_double_click = self._add_checkbox(
-            layout,
-            "Open Images on Double-Click",
-            open_images_on_double_click,
-            on_open_images_on_double_click,
-        )
-        self.prevent_oversize_items = self._add_checkbox(
-            layout, "Prevent Items Over 5 MB from Entering History",
-            prevent_oversize_items, on_prevent_oversize_items
-        )
-        self.oversize_warning = self._add_checkbox(
-            layout,
-            "Warn When Items Exceed 5 MB",
-            show_oversize_warning,
-            on_oversize_warning,
-        )
-        self.oversize_warning.setEnabled(bool(prevent_oversize_items))
-        self.prevent_oversize_items.toggled.connect(self._set_oversize_warning_availability)
-        self.close_to_tray = self._add_checkbox(
-            layout, "Keep Running When Closed", close_to_tray, on_close_to_tray
-        )
-        self.close_to_tray.setToolTip(
-            "Closing the shelf hides it in the system tray and keeps clipboard monitoring active. "
-            "The current history is cleared when the shelf is closed. Use Exit in the tray menu to quit."
-        )
-        self.start_with_windows = self._add_checkbox(
-            layout, "Start with Windows", start_with_windows, on_start_with_windows
-        )
-
-        layout.addSpacing(int(settings_theme.get("section_spacing", 18)))
-        chip_group = QGroupBox("Chip")
-        chip_form = QFormLayout(chip_group)
-        chip_form.setContentsMargins(12, 10, 12, 10)
-        chip_form.setHorizontalSpacing(12)
-        chip_form.setVerticalSpacing(8)
-
-        self.chip_min_width = QSpinBox()
-        self.chip_min_width.setRange(CHIP_WIDTH_MIN_LIMIT, CHIP_WIDTH_MAX_LIMIT)
-        self.chip_min_width.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.chip_min_width.setSuffix(" px")
-        self.chip_min_width.setValue(chip_min_width)
-        self.chip_min_width.valueChanged.connect(on_chip_min_width)
-        chip_form.addRow("Minimum Width", self.chip_min_width)
-
-        self.chip_max_width = QSpinBox()
-        self.chip_max_width.setRange(CHIP_WIDTH_MIN_LIMIT, CHIP_WIDTH_MAX_LIMIT)
-        self.chip_max_width.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.chip_max_width.setSuffix(" px")
-        self.chip_max_width.setValue(chip_max_width)
-        self.chip_max_width.valueChanged.connect(on_chip_max_width)
-        chip_form.addRow("Maximum Width", self.chip_max_width)
-
-        self.max_chips = QSpinBox()
-        self.max_chips.setRange(MAX_CHIPS_MIN, MAX_CHIPS_MAX)
-        self.max_chips.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.max_chips.setValue(max_chips)
-        self.max_chips.valueChanged.connect(on_max_chips)
-        chip_form.addRow("Maximum Chips", self.max_chips)
-        layout.addWidget(chip_group)
-
-        layout.addSpacing(int(settings_theme.get("section_spacing", 18)))
-        shelf_group = QGroupBox("Shelf")
-        shelf_form = QFormLayout(shelf_group)
-        shelf_form.setContentsMargins(12, 10, 12, 10)
-        shelf_form.setHorizontalSpacing(12)
-        shelf_form.setVerticalSpacing(8)
-
-        self.shelf_width_ratio = QDoubleSpinBox()
-        self.shelf_width_ratio.setRange(
-            SHELF_WIDTH_RATIO_MIN,
-            SHELF_WIDTH_RATIO_MAX,
-        )
-        self.shelf_width_ratio.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
-        self.shelf_width_ratio.setDecimals(2)
-        self.shelf_width_ratio.setSingleStep(0.01)
-        self.shelf_width_ratio.setValue(shelf_width_ratio)
-        self.shelf_width_ratio.valueChanged.connect(on_shelf_width_ratio)
-        shelf_form.addRow("Width Ratio", self.shelf_width_ratio)
-        layout.addWidget(shelf_group)
+        self._add_control_row(history_card, "Keep History For", "Older clips are removed automatically.", self.history_retention_days)
+        self._add_page(history)
 
         self.set_theme(theme)
+        self.setMaximumSize(*appearance.WINDOW_MAX_SIZE)
         primary_screen = QApplication.primaryScreen()
         if primary_screen is not None:
             available_geometry = primary_screen.availableGeometry()
-            self.adjustSize()
+            max_width = min(appearance.WINDOW_MAX_SIZE[0], available_geometry.width())
+            max_height = min(appearance.WINDOW_MAX_SIZE[1], available_geometry.height())
+            self.setMaximumSize(max_width, max_height)
+            self.setMinimumSize(
+                min(appearance.WINDOW_MIN_SIZE[0], max_width),
+                min(appearance.WINDOW_MIN_SIZE[1], max_height),
+            )
+            self.resize(
+                min(appearance.WINDOW_SIZE[0], available_geometry.width()),
+                min(appearance.WINDOW_SIZE[1], available_geometry.height()),
+            )
             self.move(
                 available_geometry.center().x() - self.width() // 2,
                 available_geometry.center().y() - self.height() // 2,
             )
 
-    def set_theme(self, theme):
-        self.theme = theme
-        settings = theme.get("settings", {})
-        background = settings.get("background", "#202124")
-        text_color = settings.get("text", "#c0c0c0")
-        disabled_text_color = settings.get("disabled_text", "#777b82")
-        heading_color = settings.get("heading", "#c0c0c0")
-        button_background = settings.get("button_background", "#34373b")
-        button_border = settings.get("button_border", "#45494e")
-        button_hover = settings.get("button_hover", "#41454a")
-        checkbox_background = settings.get("checkbox_background", "#292b2f")
-        checkbox_border = settings.get("checkbox_border", "#666a70")
-        checkbox_checked = settings.get("checkbox_checked", "#8F993E")
-        self.setWindowTitle(settings.get("window_title", "DockPaste Settings"))
-        self.setMinimumWidth(SETTINGS_WINDOW_MIN_WIDTH)
-        self.setStyleSheet(f"""
-            QDialog {{
-                background: {background};
-                color: {text_color};
-                font-size: {settings.get("font_size", 13)}px;
-            }}
-            QLabel {{
-                color: {text_color};
-            }}
-            QLabel#settingsHeading {{
-                color: {heading_color};
-                font-size: {settings.get("heading_font_size", 17)}px;
-                font-weight: {settings.get("heading_font_weight", 600)};
-                padding-bottom: {settings.get("heading_bottom_padding", 6)}px;
-            }}
-            QGroupBox {{
-                color: {heading_color};
-                border: 1px solid {button_border};
-                border-radius: {settings.get("button_border_radius", 5)}px;
-                margin-top: 8px;
-                padding-top: 5px;
-                font-weight: 600;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 4px;
-            }}
-            QCheckBox {{
-                color: {text_color};
-                spacing: {settings.get("checkbox_spacing", 10)}px;
-                padding: {settings.get("checkbox_padding", [5, 2])[0]}px {settings.get("checkbox_padding", [5, 2])[1]}px;
-            }}
-            QCheckBox:disabled {{ color: {disabled_text_color}; }}
-            QCheckBox::indicator {{
-                width: {settings.get("checkbox_indicator_size", 16)}px;
-                height: {settings.get("checkbox_indicator_size", 16)}px;
-                border: 1px solid {checkbox_border};
-                border-radius: {settings.get("checkbox_border_radius", 4)}px;
-                background: {checkbox_background};
-            }}
-            QCheckBox::indicator:checked {{
-                background: {checkbox_checked};
-                border-color: {checkbox_checked};
-            }}
-            QCheckBox::indicator:disabled {{
-                background: {background};
-                border-color: {disabled_text_color};
-            }}
-            QPushButton {{
-                min-width: {settings.get("button_min_width", 64)}px;
-                padding: {settings.get("button_padding", [6, 12])[0]}px {settings.get("button_padding", [6, 12])[1]}px;
-                color: {text_color};
-                background: {button_background};
-                border: 1px solid {button_border};
-                border-radius: {settings.get("button_border_radius", 5)}px;
-            }}
-            QPushButton:hover {{ background: {button_hover}; }}
-            QComboBox {{
-                color: {text_color};
-                background: {checkbox_background};
-                border: 1px solid {button_border};
-                border-radius: {settings.get("button_border_radius", 5)}px;
-                padding: 4px 6px;
-            }}
-            QComboBox QAbstractItemView {{
-                color: {text_color};
-                background: {background};
-                selection-background-color: {checkbox_checked};
-                selection-color: #ffffff;
-                border: 1px solid {button_border};
-            }}
-            QSpinBox, QDoubleSpinBox {{
-                min-width: 88px;
-                padding: 4px 6px;
-                color: {text_color};
-                background: {background};
-                border: 1px solid {button_border};
-                border-radius: {settings.get("button_border_radius", 5)}px;
-            }}
-        """)
+    def _new_page(self, title, subtitle):
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(*appearance.PAGE_MARGINS)
+        page_layout.setSpacing(appearance.PAGE_SPACING)
+        page_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        heading = QLabel(title)
+        heading.setObjectName("pageHeading")
+        page_layout.addWidget(heading)
+        description = QLabel(subtitle)
+        description.setObjectName("pageSubtitle")
+        description.setWordWrap(True)
+        page_layout.addWidget(description)
+        page_layout.addSpacing(appearance.PAGE_DESCRIPTION_GAP)
+        return page
+
+    def _add_nav_item(self, icon_name, title):
+        item = QListWidgetItem()
+        item.setSizeHint(QSize(*appearance.NAV_ITEM_SIZE))
+        self.sidebar.addItem(item)
+
+        row = SettingsNavRow()
+        row.setObjectName("settingsNavRow")
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(*appearance.NAV_ROW_MARGINS)
+        row_layout.setSpacing(appearance.NAV_ROW_SPACING)
+        icon = SettingsNavIcon(icon_name)
+        icon.setObjectName("settingsNavIcon")
+        icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        label = QLabel(title)
+        label.setObjectName("settingsNavLabel")
+        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        label_font = QFont(self.font())
+        label_font.setPointSize(appearance.FONT["sidebar_size"])
+        label_font.setWeight(QFont.Weight(appearance.FONT["sidebar_weight"]))
+        label.setFont(label_font)
+        row_layout.addWidget(icon)
+        row_layout.addWidget(label, 1)
+        self.sidebar.setItemWidget(item, row)
+        row.clicked.connect(lambda row_index=len(self._nav_rows): self.sidebar.setCurrentRow(row_index))
+        self._nav_rows.append(row)
+        self._nav_icons.append(icon)
+
+    def _on_nav_changed(self, index):
+        self.pages.setCurrentIndex(index)
+        for row_index, row in enumerate(self._nav_rows):
+            is_active = row_index == index
+            row.set_active(is_active)
+            self._nav_icons[row_index].set_active(is_active)
+
+    def _add_page(self, page):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        self.pages.addWidget(scroll)
 
     @staticmethod
-    def _add_checkbox(layout, text, checked, callback):
-        checkbox = QCheckBox(text)
+    def _card(page):
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(*appearance.CARD_MARGINS)
+        card_layout.setSpacing(appearance.CARD_ROW_SPACING)
+        page.layout().addWidget(card)
+        return card
+
+    @staticmethod
+    def _switch(title, description, checked, callback):
+        checkbox = MacSwitch()
+        checkbox.setObjectName("settingsSwitch")
         checkbox.setChecked(bool(checked))
+        checkbox.setAccessibleName(title)
+        checkbox.setToolTip(description)
         checkbox.toggled.connect(callback)
-        layout.addWidget(checkbox)
         return checkbox
 
+    def _add_switch(self, card, title, description, checked, callback):
+        checkbox = self._switch(title, description, checked, callback)
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(*appearance.SETTING_ROW_MARGINS)
+        layout.setSpacing(appearance.SETTING_ROW_SPACING)
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(*appearance.SETTING_TEXT_MARGINS)
+        text_layout.setSpacing(appearance.SETTING_TEXT_SPACING)
+        label = QLabel(title)
+        label.setObjectName("settingTitle")
+        detail = QLabel(description)
+        detail.setObjectName("settingDescription")
+        detail.setWordWrap(True)
+        text_layout.addWidget(label)
+        text_layout.addWidget(detail)
+        layout.addLayout(text_layout, 1)
+        layout.addWidget(checkbox, 0, Qt.AlignVCenter)
+        self._add_row(card, row)
+        return checkbox
+
+    @staticmethod
+    def _add_row(card, row):
+        if card.layout().count():
+            separator = QFrame()
+            separator.setObjectName("rowSeparator")
+            separator.setFixedHeight(appearance.ROW_SEPARATOR_HEIGHT)
+            card.layout().addWidget(separator)
+        card.layout().addWidget(row)
+
+    def _add_control_row(self, card, title, description, control):
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(*appearance.SETTING_ROW_MARGINS)
+        layout.setSpacing(appearance.SETTING_ROW_SPACING)
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(*appearance.SETTING_TEXT_MARGINS)
+        text_layout.setSpacing(appearance.SETTING_TEXT_SPACING)
+        label = QLabel(title)
+        label.setObjectName("settingTitle")
+        detail = QLabel(description)
+        detail.setObjectName("settingDescription")
+        detail.setWordWrap(True)
+        text_layout.addWidget(label)
+        text_layout.addWidget(detail)
+        layout.addLayout(text_layout, 1)
+        control.setMinimumWidth(appearance.CONTROL_MIN_WIDTH)
+        layout.addWidget(control, 0, Qt.AlignVCenter)
+        self._add_row(card, row)
+
+    @staticmethod
+    def _spin(value, minimum, maximum, suffix=""):
+        spin = QSpinBox()
+        spin.setRange(minimum, maximum)
+        spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        spin.setSuffix(suffix)
+        spin.setValue(value)
+        return spin
+
+    def set_theme(self, theme):
+        # Settings keep their own appearance, independent of the shelf theme.
+        p = appearance.PALETTE
+        for row in self.findChildren(SettingsNavRow):
+            row.set_colors(QColor(p["accent"]), QColor(p["surface_hover"]))
+        for switch in self.findChildren(MacSwitch):
+            switch.set_colors(
+                QColor(p["accent"]),
+                QColor(p["switch_off"]),
+                QColor(p["border"]),
+                QColor(p["white"]),
+                QColor(p["switch_disabled"]),
+            )
+        self.setWindowTitle(appearance.WINDOW_TITLE)
+        self.setStyleSheet(appearance.settings_stylesheet())
+
     def _set_oversize_warning_availability(self, prevention_enabled):
-        self.oversize_warning.setEnabled(prevention_enabled)
+        self.oversize_warning.setEnabled(bool(prevention_enabled))
         if not prevention_enabled and self.oversize_warning.isChecked():
             self.oversize_warning.setChecked(False)
+
+
+class MacSwitch(QCheckBox):
+    """Compact track-and-thumb switch drawn in the macOS settings style."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(*appearance.SWITCH_SIZE)
+        self._on_color = QColor(appearance.PALETTE["accent"])
+        self._off_color = QColor(appearance.PALETTE["switch_off"])
+        self._border_color = QColor(appearance.PALETTE["border"])
+        self._thumb_color = QColor(appearance.PALETTE["white"])
+        self._disabled_color = QColor(appearance.PALETTE["switch_disabled"])
+        self._hovered = False
+        self._thumb_position = 3.0
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._thumb_animation = QPropertyAnimation(self, b"thumbPosition", self)
+        self._thumb_animation.setDuration(appearance.SWITCH_ANIMATION_MS)
+        self._thumb_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.toggled.connect(self._animate_thumb)
+
+    def set_colors(self, on_color, off_color, border_color, thumb_color, disabled_color):
+        self._on_color = on_color
+        self._off_color = off_color
+        self._border_color = border_color
+        self._thumb_color = thumb_color
+        self._disabled_color = disabled_color
+        self.update()
+
+    @Property(float)
+    def thumbPosition(self):
+        return self._thumb_position
+
+    @thumbPosition.setter
+    def thumbPosition(self, position):
+        self._thumb_position = float(position)
+        self.update()
+
+    def _animate_thumb(self, checked):
+        self._thumb_animation.stop()
+        self._thumb_animation.setStartValue(self._thumb_position)
+        thumb_key = "on" if checked else "off"
+        self._thumb_animation.setEndValue(appearance.SWITCH_THUMB_X[thumb_key])
+        self._thumb_animation.start()
+
+    def hitButton(self, position):
+        # QCheckBox's default hit area is based on its (empty) text/indicator.
+        # The full capsule should respond, including clicks around the thumb.
+        return self.rect().contains(position)
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        track = self.rect().adjusted(
+            appearance.SWITCH_INSET,
+            appearance.SWITCH_INSET,
+            -appearance.SWITCH_INSET,
+            -appearance.SWITCH_INSET,
+        )
+        if self.isEnabled():
+            track_color = (
+                self._on_color
+                if self.isChecked()
+                else self._off_color.lighter(appearance.SWITCH_HOVER_LIGHTEN) if self._hovered else self._off_color
+            )
+            border_color = self._on_color if self.isChecked() or self.hasFocus() else self._border_color
+            thumb_color = self._thumb_color
+        else:
+            track_color = self._disabled_color
+            border_color = self._disabled_color
+            thumb_color = QColor(appearance.PALETTE["disabled_thumb"])
+        painter.setPen(QPen(border_color, appearance.SWITCH_BORDER_WIDTH))
+        painter.setBrush(track_color)
+        painter.drawRoundedRect(track, appearance.SWITCH_TRACK_RADIUS, appearance.SWITCH_TRACK_RADIUS)
+        thumb_x = round(self._thumb_position)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(thumb_color)
+        thumb_size = appearance.SWITCH_THUMB_SIZE
+        thumb_y = (self.height() - thumb_size) // 2
+        painter.drawEllipse(thumb_x, thumb_y, thumb_size, thumb_size)
+
+
+class MacComboBox(QComboBox):
+    """Draw a restrained macOS-style popup button and keep Qt's native popup."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("macCombo")
+        self.setMinimumWidth(appearance.DROPDOWN_MIN_SIZE[0])
+        self.setMinimumHeight(appearance.DROPDOWN_MIN_SIZE[1])
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMouseTracking(True)
+        self.setMaxVisibleItems(appearance.DROPDOWN_VISIBLE_ITEMS)
+        self.view().setMouseTracking(True)
+        self.view().viewport().setMouseTracking(True)
+        self.view().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.view().viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.view().setUniformItemSizes(True)
+        self.view().setSpacing(appearance.DROPDOWN_ITEM_SPACING)
+        self.view().setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.view().setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view().setMaximumHeight(appearance.DROPDOWN_MAX_HEIGHT)
+        self.view().setStyleSheet(appearance.dropdown_stylesheet())
+        self._hovered = False
+
+    def paintEvent(self, event):
+        text_color = QColor(appearance.PALETTE["text"])
+        muted = QColor(appearance.PALETTE["control_border"])
+        focus_border = QColor(appearance.PALETTE["control_focus_border"])
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(*appearance.DROPDOWN_BORDER_INSET)
+        border = focus_border if self.hasFocus() else QColor(appearance.PALETTE["control_hover_border"]) if self._hovered else muted
+        painter.setPen(QPen(border, appearance.DROPDOWN_BORDER_WIDTH))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(rect, appearance.DROPDOWN_RADIUS, appearance.DROPDOWN_RADIUS)
+        painter.setPen(text_color)
+        text_rect = self.rect().adjusted(
+            appearance.DROPDOWN_TEXT_INSET,
+            0,
+            -appearance.DROPDOWN_ICON_GAP,
+            0,
+        )
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.currentText())
+        cx = self.width() - appearance.DROPDOWN_ARROW_INSET
+        cy = self.height() // 2
+        half_width = appearance.DROPDOWN_ARROW_HALF_WIDTH
+        half_height = appearance.DROPDOWN_ARROW_HALF_HEIGHT
+        painter.setPen(QPen(text_color, appearance.DROPDOWN_ARROW_STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.drawLine(QPoint(cx - half_width, cy - half_height), QPoint(cx, cy + half_height))
+        painter.drawLine(QPoint(cx, cy + half_height), QPoint(cx + half_width, cy - half_height))
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)

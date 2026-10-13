@@ -63,6 +63,6 @@ CHIP_WIDTH_DEFAULTS_VERSION = 2
 # -----------------------------------------------------------------------------
 
 SHELF_WIDTH_RATIO = 0.7
-SHELF_WIDTH_RATIO_MIN = 0.50
+SHELF_WIDTH_RATIO_MIN = 0.30
 SHELF_WIDTH_RATIO_MAX = 0.98
 SETTINGS_WINDOW_MIN_WIDTH = 320
