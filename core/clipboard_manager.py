@@ -24,7 +24,7 @@ from urllib.request import (
 
 from PySide6.QtCore import QObject, QByteArray, QBuffer, QMimeData, Qt, Signal, Slot, QTimer
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QImage, QClipboard
+from PySide6.QtGui import QImage, QPixmap, QClipboard
 
 from core.image_store import ImageStore
 from core.database import ClipboardDatabase
@@ -34,6 +34,7 @@ from utils.item_limits import is_oversized_file, is_oversized_text
 
 PASTE_IMAGE_CACHE_MAX_BYTES = 48 * 1024 * 1024
 MAX_PERSISTED_RICH_FORMAT_BYTES = 16 * 1024 * 1024
+MAX_CLIPBOARD_RESTORE_BYTES = 64 * 1024 * 1024
 
 
 def _resolve_public_http_url(url):
@@ -154,6 +155,7 @@ class ClipboardManager(QObject):
         self._clipboard_image_snapshot_hash = None
         self._clipboard_rich_formats_snapshot = {}
         self._restore_rich_formats = {}
+        self._restore_clipboard_formats = None
         self._rich_formats_by_image_path = {}
         self._image_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copypin-image")
         self._image_lock = Lock()
@@ -383,20 +385,69 @@ class ClipboardManager(QObject):
             log_exception("Failed to register image opened in external viewer")
 
     def set_text_for_paste(self, text, temporary=False):
+        if temporary and not self._pending_restore:
+            snapshot = self._snapshot_clipboard()
+            if snapshot is None:
+                return False
+            self._store_restore_snapshot(snapshot)
+        elif not temporary:
+            self._pending_restore = False
+            self._restore_clipboard_formats = None
+
         self._ignore_next_count += 1
         self._last_text = text
-        self._restore_text = self._get_current_clipboard_text()
-        self._restore_image = self._clipboard_image_snapshot
-        if self._restore_image is None:
-            self._restore_image = self._get_current_clipboard_image()
-        self._restore_image_hash = self._clipboard_image_snapshot_hash
-        self._restore_rich_formats = self._clipboard_rich_formats_snapshot
         self.clipboard.setText(text, QClipboard.Clipboard)
         self._clipboard_image_snapshot = None
         self._clipboard_image_snapshot_hash = None
         self._clipboard_rich_formats_snapshot = {}
         if temporary:
             self._pending_restore = True
+        return True
+
+    def _snapshot_clipboard(self):
+        """Copy the current clipboard MIME payload before a temporary paste."""
+        try:
+            mime = self.clipboard.mimeData(QClipboard.Clipboard)
+            if mime is None:
+                return {"formats": {}, "image": None, "text": None}
+
+            formats = {}
+            total_bytes = 0
+            for raw_format in mime.formats():
+                format_name = str(raw_format)
+                payload = bytes(mime.data(raw_format))
+                total_bytes += len(payload)
+                if total_bytes > MAX_CLIPBOARD_RESTORE_BYTES:
+                    return None
+                formats[format_name] = payload
+
+            image = None
+            if mime.hasImage():
+                image_data = mime.imageData()
+                if isinstance(image_data, QPixmap):
+                    image = image_data.toImage()
+                elif isinstance(image_data, QImage) and not image_data.isNull():
+                    image = QImage(image_data)
+
+            return {
+                "formats": formats,
+                "image": image,
+                "text": mime.text() if mime.hasText() else None,
+            }
+        except Exception:
+            log_exception("Failed to snapshot clipboard before paste")
+            return None
+
+    def _store_restore_snapshot(self, snapshot):
+        self._restore_clipboard_formats = snapshot["formats"]
+        self._restore_text = snapshot["text"]
+        self._restore_image = snapshot["image"]
+        self._restore_image_hash = None
+        self._restore_rich_formats = {
+            name: payload
+            for name, payload in snapshot["formats"].items()
+            if name.casefold() != "application/x-qt-image"
+        }
 
     def set_image_for_paste(self, image_path, temporary=False):
         try:
@@ -404,15 +455,18 @@ class ClipboardManager(QObject):
             if image.isNull():
                 return False
 
+            if temporary and not self._pending_restore:
+                snapshot = self._snapshot_clipboard()
+                if snapshot is None:
+                    return False
+                self._store_restore_snapshot(snapshot)
+            elif not temporary:
+                self._pending_restore = False
+                self._restore_clipboard_formats = None
+
             self._ignore_next_count += 1
             self._last_image_cache_key = image.cacheKey()
             self._last_image_hash = image_hash
-            self._restore_text = self._get_current_clipboard_text()
-            self._restore_image = self._clipboard_image_snapshot
-            if self._restore_image is None:
-                self._restore_image = self._get_current_clipboard_image()
-            self._restore_image_hash = self._clipboard_image_snapshot_hash
-            self._restore_rich_formats = self._clipboard_rich_formats_snapshot
             rich_formats = self._load_rich_formats(image_path)
             if rich_formats:
                 self.clipboard.setMimeData(self._mime_data_with_image(rich_formats, image))
@@ -436,6 +490,35 @@ class ClipboardManager(QObject):
         self._ignore_next_count += 1
         previous_text = getattr(self, "_restore_text", None)
         previous_image = getattr(self, "_restore_image", None)
+        previous_formats = self._restore_clipboard_formats
+        if previous_formats is not None:
+            if not previous_formats and previous_image is None:
+                self.clipboard.clear(QClipboard.Clipboard)
+            else:
+                mime_data = QMimeData()
+                if previous_image is not None:
+                    mime_data.setImageData(previous_image)
+                for format_name, payload in previous_formats.items():
+                    if format_name.casefold() == "application/x-qt-image":
+                        continue
+                    mime_data.setData(format_name, QByteArray(payload))
+                self.clipboard.setMimeData(mime_data, QClipboard.Clipboard)
+            self._last_text = previous_text or ""
+            self._clipboard_image_snapshot = previous_image
+            self._clipboard_image_snapshot_hash = (
+                self._restore_image_hash or self._hash_image(previous_image)
+                if previous_image is not None
+                else None
+            )
+            self._last_image_hash = self._clipboard_image_snapshot_hash
+            self._clipboard_rich_formats_snapshot = (
+                dict(self._restore_rich_formats) if previous_image is not None else {}
+            )
+            self._last_image_cache_key = (
+                previous_image.cacheKey() if previous_image is not None else None
+            )
+            self._restore_clipboard_formats = None
+            return
         if previous_image is not None:
             self._last_image_cache_key = previous_image.cacheKey()
             self._last_image_hash = (

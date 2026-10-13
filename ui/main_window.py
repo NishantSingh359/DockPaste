@@ -680,13 +680,16 @@ class MainWindow(QWidget):
 
     @safe_slot("Failed to paste clipboard chip")
     def paste_clip(self, content):
-        if self.hide_on_paste_enabled:
-            self.hide_shelf()
         chip = self.chips_by_content.get(content)
         if chip and chip.kind == "IMG":
-            self.clipboard_manager.set_image_for_paste(content, temporary=True)
+            clipboard_ready = self.clipboard_manager.set_image_for_paste(content, temporary=True)
         else:
-            self.clipboard_manager.set_text_for_paste(content, temporary=True)
+            clipboard_ready = self.clipboard_manager.set_text_for_paste(content, temporary=True)
+        if not clipboard_ready:
+            return
+
+        if self.hide_on_paste_enabled:
+            self.hide_shelf()
 
         QTimer.singleShot(
             MOTION_SHELF_MS,
