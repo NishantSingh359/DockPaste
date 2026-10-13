@@ -1,7 +1,10 @@
 import base64
 import ctypes
+import http.client
+import ipaddress
 import json
 import os
+import socket
 from html.parser import HTMLParser
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -10,7 +13,14 @@ from pathlib import Path
 from threading import Lock
 from time import monotonic
 from urllib.parse import parse_qs, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import (
+    HTTPHandler,
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 
 from PySide6.QtCore import QObject, QByteArray, QBuffer, QMimeData, Qt, Signal, Slot, QTimer
 from PySide6.QtWidgets import QApplication
@@ -24,6 +34,93 @@ from utils.item_limits import is_oversized_file, is_oversized_text
 
 PASTE_IMAGE_CACHE_MAX_BYTES = 48 * 1024 * 1024
 MAX_PERSISTED_RICH_FORMAT_BYTES = 16 * 1024 * 1024
+
+
+def _resolve_public_http_url(url):
+    """Resolve a copied image URL and reject non-public network destinations."""
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.casefold()
+    if scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("Only public HTTP(S) image URLs are allowed")
+
+    try:
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except ValueError as exc:
+        raise ValueError("Invalid image URL port") from exc
+    if port not in {80, 443}:
+        raise ValueError("Non-standard image URL ports are not allowed")
+
+    addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+    if not addresses:
+        raise ValueError("Image URL host did not resolve")
+
+    resolved = []
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if not ip.is_global:
+            raise ValueError("Image URL resolves to a non-public address")
+        if ip.compressed not in resolved:
+            resolved.append(ip.compressed)
+    return parsed, port, resolved[0]
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Connect to the already validated address to prevent DNS rebinding."""
+
+    def __init__(self, host, address, **kwargs):
+        super().__init__(host, **kwargs)
+        self._pinned_address = address
+
+    def connect(self):
+        self.sock = socket.create_connection(
+            (self._pinned_address, self.port), self.timeout, self.source_address
+        )
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection pinned to a validated IP, retaining hostname checks."""
+
+    def __init__(self, host, address, **kwargs):
+        super().__init__(host, **kwargs)
+        self._pinned_address = address
+
+    def connect(self):
+        sock = socket.create_connection(
+            (self._pinned_address, self.port), self.timeout, self.source_address
+        )
+        try:
+            self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        except Exception:
+            sock.close()
+            raise
+
+
+class _PublicHTTPHandler(HTTPHandler):
+    def http_open(self, request):
+        _, _, address = _resolve_public_http_url(request.full_url)
+        return self.do_open(
+            lambda host, **kwargs: _PinnedHTTPConnection(host, address, **kwargs),
+            request,
+        )
+
+
+class _PublicHTTPSHandler(HTTPSHandler):
+    def https_open(self, request):
+        _, _, address = _resolve_public_http_url(request.full_url)
+        return self.do_open(
+            lambda host, **kwargs: _PinnedHTTPSConnection(host, address, **kwargs),
+            request,
+            context=self._context,
+            check_hostname=self._check_hostname,
+        )
+
+
+class _PublicRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        _resolve_public_http_url(new_url)
+        return super().redirect_request(
+            request, file_pointer, code, message, headers, new_url
+        )
 
 
 class ClipboardManager(QObject):
@@ -681,8 +778,18 @@ class ClipboardManager(QObject):
     def _download_remote_image(self, image_url):
         """Fetch a browser-copied image reference and store its decoded pixels."""
         try:
+            # Resolve and pin the destination before connecting. Reject private
+            # addresses and revalidate each redirect to avoid clipboard-driven
+            # requests into localhost or private networks.
+            _resolve_public_http_url(image_url)
+            opener = build_opener(
+                ProxyHandler({}),
+                _PublicHTTPHandler(),
+                _PublicHTTPSHandler(),
+                _PublicRedirectHandler(),
+            )
             request = Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urlopen(request, timeout=10) as response:
+            with opener.open(request, timeout=10) as response:
                 payload = response.read(MAX_CLIP_ITEM_SIZE_BYTES + 1)
             if len(payload) > MAX_CLIP_ITEM_SIZE_BYTES:
                 if self.enforce_size_limit:
