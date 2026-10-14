@@ -1,5 +1,5 @@
 #define MyAppName "DockPaste"
-#define MyAppVersion "v1.5"
+#define MyAppVersion "v1.6"
 #define MyAppExeName "DockPaste.exe"
 
 [Setup]
@@ -11,7 +11,7 @@ DefaultGroupName=DockPaste
 DisableProgramGroupPage=yes
 OutputDir=..\dist\installer
 OutputBaseFilename=DockPaste-Setup-{#MyAppVersion}
-SetupIconFile=..\assets\app_icons\icon256x256.ico
+SetupIconFile=..\assets\app_icons\DockPaste.ico
 UninstallDisplayIcon={app}\DockPaste.exe
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
@@ -25,10 +25,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\dist\DockPaste\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\assets\app_icons\DockPaste.ico"; DestDir: "{app}"; DestName: "DockPaste-2026.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\DockPaste"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\DockPaste"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\DockPaste"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\DockPaste-2026.ico"
+Name: "{autodesktop}\DockPaste"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\DockPaste-2026.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch DockPaste"; Flags: postinstall nowait skipifsilent
