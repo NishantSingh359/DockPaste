@@ -342,6 +342,18 @@ class ClipboardDatabase:
         finally:
             conn.close()
 
+    def get_daily_index(self, content: str, clip_date: str) -> int | None:
+        """Return a clip's persisted daily index for shelf ordering/display."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                'SELECT "index" FROM clips WHERE date = ? AND content = ?',
+                (clip_date, content),
+            ).fetchone()
+            return int(row["index"]) if row else None
+        finally:
+            conn.close()
+
     def get_by_type(self, clip_type: str, limit: int = 50, offset: int = 0) -> list[dict]:
         """
         Retrieve clipboard history filtered by type.

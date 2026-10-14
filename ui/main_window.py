@@ -381,7 +381,7 @@ class MainWindow(QWidget):
         self.clearMask()
 
     @safe_slot("Failed to add clipboard chip")
-    def add_clip(self, content, clip_date=None):
+    def add_clip(self, content, clip_date=None, clip_index=None):
         clip_date = clip_date or date.today().isoformat()
         if (
             self._history_date_filter is not None
@@ -391,8 +391,16 @@ class MainWindow(QWidget):
         if content in self.chips_by_content:
             return
 
+        if clip_index is None:
+            try:
+                clip_index = self.clipboard_manager.get_db().get_daily_index(
+                    content, clip_date
+                )
+            except Exception:
+                log_exception("Failed to retrieve clipboard index")
+
         self._clip_dates_by_content[content] = clip_date
-        self.add_chip(content)
+        self.add_chip(content, clip_index)
 
     def set_history_date_filter(self, clip_date):
         clip_date = clip_date or date.today().isoformat()
@@ -413,10 +421,10 @@ class MainWindow(QWidget):
         self._next_chip_number = 1
         for record in records:
             content = record["content"]
-            self.add_clip(content, record["date"])
+            self.add_clip(content, record["date"], record["index"])
 
     @safe_slot("Failed to create clipboard chip")
-    def add_chip(self, content):
+    def add_chip(self, content, clip_index=None):
         if content in self.chips_by_content:
             return
 
@@ -430,7 +438,7 @@ class MainWindow(QWidget):
             open_images_on_double_click=self.open_images_on_double_click_enabled,
             theme=self.theme,
         )
-        self._assign_chip_number(chip)
+        self._assign_chip_number(chip, clip_index)
         chip.paste_requested.connect(self.paste_clip)
         chip.text_preview_requested.connect(self._show_text_preview)
         chip.image_opening.connect(self.clipboard_manager.ignore_image_capture)
@@ -470,6 +478,7 @@ class MainWindow(QWidget):
         except Exception:
             log_exception("Failed to delete clipboard item")
         self.remove_chip_widget(chip)
+        self._refresh_clip_indexes_for_date(clip_date)
 
     def remove_chip_widget(self, chip):
         self._remove_chip_widgets([chip])
@@ -528,15 +537,20 @@ class MainWindow(QWidget):
             if not chip.pinned and not getattr(chip, "_is_deleting", False)
         ]
 
+        affected_dates = set()
         for chip in chips:
             self.chips_by_content.pop(chip.content, None)
             clip_date = self._clip_dates_by_content.pop(chip.content, None)
+            if clip_date:
+                affected_dates.add(clip_date)
             try:
                 self.clipboard_manager.get_db().delete_by_content(chip.content, clip_date)
             except Exception:
                 log_exception("Failed to delete clipboard item during clear")
 
         self._remove_chip_widgets(chips)
+        for clip_date in affected_dates:
+            self._refresh_clip_indexes_for_date(clip_date)
 
     @safe_slot("Failed to pin clipboard chip")
     def pin_clip(self, content):
@@ -657,10 +671,29 @@ class MainWindow(QWidget):
 
         self.chip_layout.insertWidget(insert_at, chip)
 
-    def _assign_chip_number(self, chip):
-        chip.set_clip_index(self._next_chip_number, show_index=self.clip_indexing_enabled)
-        self._next_chip_number += 1
-        self._save_context_menu_settings()
+    def _assign_chip_number(self, chip, clip_index=None):
+        if clip_index is None:
+            clip_index = self._next_chip_number
+        chip.set_clip_index(clip_index, show_index=self.clip_indexing_enabled)
+        self._next_chip_number = max(self._next_chip_number, int(clip_index) + 1)
+
+    def _refresh_clip_indexes_for_date(self, clip_date):
+        if clip_date is None:
+            return
+        try:
+            records = self.clipboard_manager.get_db().get_by_date(clip_date)
+        except Exception:
+            log_exception("Failed to refresh clipboard indexes")
+            return
+
+        indexes = {record["content"]: record["index"] for record in records}
+        for content, chip in self.chips_by_content.items():
+            if self._clip_dates_by_content.get(content) != clip_date:
+                continue
+            if content in indexes:
+                chip.set_clip_index(
+                    indexes[content], show_index=self.clip_indexing_enabled
+                )
 
     def refresh_chip_indexes(self):
         chips = []
