@@ -250,8 +250,8 @@ class SettingsDialog(QDialog):
         self.shelf_width_ratio = QDoubleSpinBox()
         self.shelf_width_ratio.setRange(SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX)
         self.shelf_width_ratio.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
-        self.shelf_width_ratio.setDecimals(2)
-        self.shelf_width_ratio.setSingleStep(0.01)
+        self.shelf_width_ratio.setDecimals(appearance.SHELF_WIDTH_DECIMALS)
+        self.shelf_width_ratio.setSingleStep(appearance.SHELF_WIDTH_STEP)
         self.shelf_width_ratio.setValue(shelf_width_ratio)
         self.shelf_width_ratio.valueChanged.connect(on_shelf_width_ratio)
         self._add_control_row(sizing_card, "Shelf Width", "Shelf width as a proportion of the screen.", self.shelf_width_ratio)
@@ -505,7 +505,7 @@ class MacSwitch(QCheckBox):
         self._thumb_color = QColor(appearance.PALETTE["white"])
         self._disabled_color = QColor(appearance.PALETTE["switch_disabled"])
         self._hovered = False
-        self._thumb_position = 3.0
+        self._thumb_position = float(appearance.SWITCH_THUMB_X["off"])
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._thumb_animation = QPropertyAnimation(self, b"thumbPosition", self)
         self._thumb_animation.setDuration(appearance.SWITCH_ANIMATION_MS)
@@ -589,6 +589,13 @@ class MacComboBox(QComboBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("macCombo")
+        self.setFont(
+            QFont(
+                appearance.FONT_FAMILY,
+                appearance.FONT["control_size"],
+                appearance.FONT["control_weight"],
+            )
+        )
         self.setMinimumWidth(appearance.DROPDOWN_MIN_SIZE[0])
         self.setMinimumHeight(appearance.DROPDOWN_MIN_SIZE[1])
         self.setCursor(Qt.CursorShape.PointingHandCursor)

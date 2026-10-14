@@ -30,6 +30,7 @@ PALETTE = {
     "text": "#D2D2D2",
     "secondary_text": "#A1A1A6",
     "accent": "#0071E3",
+    "danger": "#FF6961",
     "white": "#D4D4D4",
     "switch_off": "#505050",
     "switch_disabled": "#323232",
@@ -55,7 +56,11 @@ FONT = {
 SIDEBAR_WIDTH = 260
 SIDEBAR_SPACING = 4
 SIDEBAR_PADDING = (18, 10)
-NAV_ITEM_SIZE = (206, 46)
+NAV_ITEM_MARGINS = (2, 3, 2, 3)
+NAV_ITEM_SIZE = (
+    SIDEBAR_WIDTH - 2 * SIDEBAR_PADDING[1] - 2 * NAV_ITEM_MARGINS[1],
+    46,
+)
 NAV_ROW_MARGINS = (10, 0, 8, 0)
 NAV_ROW_SPACING = 12
 NAV_ICON_SIZE = 24
@@ -63,11 +68,10 @@ NAV_ICON_VIEWBOX_SIZE = 24
 NAV_ICON_STROKE_WIDTH = 2
 NAV_ROW_INSET = (2, 1, -2, -1)
 NAV_ROW_RADIUS = 8
-NAV_ITEM_MARGINS = (2, 3, 2, 3)
 
 PAGE_MARGINS = (30, 26, 30, 28)
 PAGE_SPACING = 6
-PAGE_DESCRIPTION_GAP = 50
+PAGE_DESCRIPTION_GAP = 16
 CARD_MARGINS = (16, 4, 16, 4)
 CARD_ROW_SPACING = 0
 CARD_RADIUS = 12
@@ -77,6 +81,24 @@ SETTING_TEXT_SPACING = 3
 SETTING_TEXT_MARGINS = (0, 0, 0, 0)
 ROW_SEPARATOR_HEIGHT = 1
 CONTROL_MIN_WIDTH = 150
+CONTROL_RADIUS = 8
+CONTROL_PADDING = (7, 10)
+CONTROL_MIN_HEIGHT = 18
+SUBTITLE_BOTTOM_PADDING = 2
+SHELF_WIDTH_DECIMALS = 2
+SHELF_WIDTH_STEP = 0.01
+
+CLEAR_BUTTON_RADIUS = 8
+CLEAR_BUTTON_PADDING = (8, 12)
+CONFIRMATION_BUTTON_RADIUS = 7
+CONFIRMATION_BUTTON_PADDING = (7, 14)
+CONFIRMATION_BUTTON_MIN_WIDTH = 76
+CONFIRMATION_BUTTON_WEIGHT = 500
+
+SCROLLBAR_WIDTH = 10
+SCROLLBAR_MARGIN = (4, 2)
+SCROLLBAR_HANDLE_MIN_HEIGHT = 28
+SCROLLBAR_RADIUS = 4
 
 SWITCH_SIZE = (42, 24)
 SWITCH_TRACK_RADIUS = 11
@@ -93,6 +115,10 @@ DROPDOWN_MAX_HEIGHT = 252
 DROPDOWN_ITEM_HEIGHT = 34
 DROPDOWN_ITEM_SPACING = 2
 DROPDOWN_RADIUS = 8
+DROPDOWN_LIST_PADDING = 5
+DROPDOWN_ITEM_PADDING = (0, 10)
+DROPDOWN_ITEM_MARGINS = (1, 2)
+DROPDOWN_ITEM_RADIUS = 5
 DROPDOWN_BORDER_INSET = (1, 1, -1, -1)
 DROPDOWN_ICON_GAP = 30
 DROPDOWN_TEXT_INSET = 11
@@ -126,6 +152,7 @@ def settings_stylesheet():
     f = FONT
     return f"""
         QDialog {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {f['dialog_size']}px; }}
+        QDialog QWidget {{ font-family: {FONT_FAMILY}; }}
         QStackedWidget#settingsPages {{ background: {p['background']}; }}
         QScrollArea#settingsPageScroll {{ background: {p['background']}; border: none; }}
         QWidget#settingsPage {{ background: {p['background']}; }}
@@ -134,22 +161,22 @@ def settings_stylesheet():
         QWidget#settingsNavRow {{ background: transparent; border-radius: {NAV_ROW_RADIUS}px; }}
         QLabel#settingsNavLabel {{ color: {p['text']}; font-weight: {f['sidebar_weight']}; }}
         QLabel#pageHeading {{ color: {p['text']}; font-size: {f['page_title_size']}px; font-weight: {f['page_title_weight']}; }}
-        QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: 2px; }}
+        QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: {SUBTITLE_BOTTOM_PADDING}px; }}
         QFrame#settingsCard {{ background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
-        QPushButton#clearHistoryButton {{ color: #FF6961; background: {p['control_background']}; border: 1px solid {p['border']}; border-radius: 8px; padding: 8px 12px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
-        QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: #FF6961; }}
+        QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: 1px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
+        QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: {p['danger']}; }}
         QPushButton#clearHistoryButton:pressed {{ background: {p['surface_hover']}; }}
         QLabel#settingTitle {{ color: {p['text']}; font-size: {f['setting_title_size']}px; font-weight: {f['setting_title_weight']}; }}
         QLabel#settingDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
         QCheckBox#settingsSwitch {{ background: transparent; border: none; }}
-        QComboBox, QSpinBox, QDoubleSpinBox {{ color: {p['text']}; background: {p['control_background']}; border: 1px solid {p['control_border']}; border-radius: 8px; padding: 7px 10px; min-height: 18px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; }}
+        QComboBox, QSpinBox, QDoubleSpinBox {{ color: {p['text']}; background: {p['control_background']}; border: 1px solid {p['control_border']}; border-radius: {CONTROL_RADIUS}px; padding: {CONTROL_PADDING[0]}px {CONTROL_PADDING[1]}px; min-height: {CONTROL_MIN_HEIGHT}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; }}
         QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ color: {p['text']}; background: {p['control_hover_background']}; border-color: {p['control_hover_border']}; }}
         QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {p['control_focus_border']}; }}
         QComboBox#macCombo {{ padding: 0; border: none; background: transparent; min-height: {DROPDOWN_MIN_SIZE[1]}px; }}
         QLineEdit, QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ color: {p['text']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; font-weight: {f['control_weight']}; }}
-        QScrollBar:vertical {{ background: transparent; width: 10px; margin: 4px 2px; }}
-        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: 28px; border-radius: 4px; }}
+        QScrollBar:vertical {{ background: transparent; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; }}
+        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """
 
@@ -159,10 +186,10 @@ def confirmation_stylesheet():
     return f"""
         QMessageBox {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
         QMessageBox QLabel {{ color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
-        QMessageBox QPushButton {{ color: {p['text']}; background: {p['surface']}; border: 1px solid {p['border']}; border-radius: 7px; padding: 7px 14px; min-width: 76px; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; font-weight: 500; }}
+        QMessageBox QPushButton {{ color: {p['text']}; background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {CONFIRMATION_BUTTON_RADIUS}px; padding: {CONFIRMATION_BUTTON_PADDING[0]}px {CONFIRMATION_BUTTON_PADDING[1]}px; min-width: {CONFIRMATION_BUTTON_MIN_WIDTH}px; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; font-weight: {CONFIRMATION_BUTTON_WEIGHT}; }}
         QMessageBox QPushButton:hover {{ background: {p['surface_hover']}; }}
         QMessageBox QPushButton:focus {{ border-color: {p['control_focus_border']}; outline: none; }}
-        QMessageBox QPushButton#confirmClearButton {{ color: #FF6961; }}
+        QMessageBox QPushButton#confirmClearButton {{ color: {p['danger']}; }}
     """
 
 
@@ -175,22 +202,23 @@ def dropdown_stylesheet():
             border: 1px solid {p['control_border']};
             border-radius: {DROPDOWN_RADIUS}px;
             outline: none;
-            padding: 5px;
+            padding: {DROPDOWN_LIST_PADDING}px;
+            font-family: {FONT_FAMILY};
             font-size: {FONT['control_size']}px;
             font-weight: {FONT['control_weight']};
         }}
         QListView::item {{
             color: {p['text']};
             height: {DROPDOWN_ITEM_HEIGHT}px;
-            padding: 0 10px;
-            margin: 1px 2px;
-            border-radius: 5px;
+            padding: {DROPDOWN_ITEM_PADDING[0]}px {DROPDOWN_ITEM_PADDING[1]}px;
+            margin: {DROPDOWN_ITEM_MARGINS[0]}px {DROPDOWN_ITEM_MARGINS[1]}px;
+            border-radius: {DROPDOWN_ITEM_RADIUS}px;
         }}
         QListView::item:hover, QListView::item:selected, QListView::item:focus {{
             color: {p['white']};
             background: {p['accent']};
         }}
-        QScrollBar:vertical {{ background: transparent; width: 10px; margin: 4px 2px; }}
-        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: 28px; border-radius: 4px; }}
+        QScrollBar:vertical {{ background: transparent; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; }}
+        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """
