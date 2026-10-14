@@ -4,13 +4,18 @@ Keep these values separate from the shelf themes so Settings stays visually
 consistent when the user changes the appearance of the shelf.
 """
 
+import sys
+from pathlib import Path
+
 WINDOW_TITLE = "DockPaste Settings"
-WINDOW_SIZE = (900, 680)
-WINDOW_MIN_SIZE = (900, 680)
-WINDOW_MAX_SIZE = (1000, 700)
+WINDOW_SIZE = (900, 700)
+WINDOW_MIN_SIZE = (900, 700)
+WINDOW_MAX_SIZE = (11000, 900)
 ROOT_MARGINS = (0, 0, 0, 0)
 ROOT_SPACING = 0
-FONT_FAMILY = "Segoe UI"
+FONT_FAMILY = "Inter"
+_BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+FONT_FILE = _BUNDLE_ROOT / "assets" / "fonts" / "Inter-Variable.ttf"
 
 PALETTE = {
     "background": "#141414",
@@ -35,15 +40,15 @@ FONT = {
     "dialog_size": 13,
     "sidebar_size": 14,
     "sidebar_weight": 500,
-    "page_title_size": 27,
+    "page_title_size": 30,
     "page_title_weight": 700,
     "page_subtitle_size": 14,
     "page_subtitle_weight": 600,
-    "setting_title_size": 18,
+    "setting_title_size": 20,
     "setting_title_weight": 500,
     "setting_description_size": 12,
     "setting_description_weight": 600,
-    "control_size": 13,
+    "control_size": 15,
     "control_weight": 600,
 }
 
@@ -53,9 +58,9 @@ SIDEBAR_PADDING = (18, 10)
 NAV_ITEM_SIZE = (206, 46)
 NAV_ROW_MARGINS = (10, 0, 8, 0)
 NAV_ROW_SPACING = 12
-NAV_ICON_SIZE = 22
+NAV_ICON_SIZE = 24
 NAV_ICON_VIEWBOX_SIZE = 24
-NAV_ICON_STROKE_WIDTH = 1.8
+NAV_ICON_STROKE_WIDTH = 2
 NAV_ROW_INSET = (2, 1, -2, -1)
 NAV_ROW_RADIUS = 8
 NAV_ITEM_MARGINS = (2, 3, 2, 3)

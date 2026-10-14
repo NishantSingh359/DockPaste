@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEasingCurve, QPoint, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -154,6 +154,7 @@ class SettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        QFontDatabase.addApplicationFont(str(appearance.FONT_FILE))
         self.resize(*appearance.WINDOW_SIZE)
 
         root = QHBoxLayout(self)
@@ -326,9 +327,11 @@ class SettingsDialog(QDialog):
         label = QLabel(title)
         label.setObjectName("settingsNavLabel")
         label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        label_font = QFont(self.font())
-        label_font.setPointSize(appearance.FONT["sidebar_size"])
-        label_font.setWeight(QFont.Weight(appearance.FONT["sidebar_weight"]))
+        label_font = QFont(
+            appearance.FONT_FAMILY,
+            appearance.FONT["sidebar_size"],
+            appearance.FONT["sidebar_weight"],
+        )
         label.setFont(label_font)
         row_layout.addWidget(icon)
         row_layout.addWidget(label, 1)
