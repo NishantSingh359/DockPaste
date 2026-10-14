@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 WINDOW_TITLE = "Settings"
-WINDOW_SIZE = (900, 700)
-WINDOW_MIN_SIZE = (900, 700)
-WINDOW_MAX_SIZE = (1100, 900)
+WINDOW_SIZE = (900, 770)
+WINDOW_MIN_SIZE = (900, 770)
+WINDOW_MAX_SIZE = (1100, 1000)
 ROOT_MARGINS = (0, 0, 0, 0)
 ROOT_SPACING = 0
 FONT_FAMILY = "Inter"
@@ -42,13 +42,13 @@ FONT = {
     "sidebar_weight": 500,
     "page_title_size": 30,
     "page_title_weight": 700,
-    "page_subtitle_size": 14,
+    "page_subtitle_size": 16,
     "page_subtitle_weight": 600,
     "setting_title_size": 20,
-    "setting_title_weight": 500,
-    "setting_description_size": 12,
+    "setting_title_weight": 600,
+    "setting_description_size": 14,
     "setting_description_weight": 600,
-    "control_size": 15,
+    "control_size": 16,
     "control_weight": 600,
 }
 
@@ -67,7 +67,7 @@ NAV_ITEM_MARGINS = (2, 3, 2, 3)
 
 PAGE_MARGINS = (30, 26, 30, 28)
 PAGE_SPACING = 6
-PAGE_DESCRIPTION_GAP = 12
+PAGE_DESCRIPTION_GAP = 50
 CARD_MARGINS = (16, 4, 16, 4)
 CARD_ROW_SPACING = 0
 CARD_RADIUS = 12

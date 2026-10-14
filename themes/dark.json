@@ -149,11 +149,15 @@
   },
 
   "notification": {
-    "background": "#292b2f",
+    "background": "#232323",
     "text": "#f2f2f2",
     "muted_text": "#c0c0c0",
-    "border": "rgba(255, 255, 255, 0.14)",
-    "accent": "#b4bf54",
+    "border": "#333333",
+    "accent": "#0071E3",
+    "title_font_size": 18,
+    "title_font_weight": 600,
+    "message_font_size": 14,
+    "message_font_weight": 600,
     "border_radius": 12,
     "padding": [12, 16],
     "width": 360,

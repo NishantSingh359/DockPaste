@@ -31,10 +31,10 @@ class OversizedItemPopup(QWidget):
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(3)
-        self.title = QLabel("Item exceeds 5 MB", self.card)
+        self.title = QLabel("Item Exceeds 5 MB", self.card)
         self.title.setObjectName("oversizedItemTitle")
         self.message = QLabel(
-            "Large files, folders, images, and text are skipped.", self.card
+            "Large Files, Folders, Images, and Text are Skipped.", self.card
         )
         self.message.setObjectName("oversizedItemMessage")
         self.message.setWordWrap(True)
@@ -53,6 +53,10 @@ class OversizedItemPopup(QWidget):
         muted_text = notification.get("muted_text", text)
         border = notification.get("border", "rgba(255, 255, 255, 0.14)")
         accent = notification.get("accent", "#d7df78")
+        title_font_size = int(notification.get("title_font_size", 14))
+        title_font_weight = int(notification.get("title_font_weight", 600))
+        message_font_size = int(notification.get("message_font_size", 12))
+        message_font_weight = int(notification.get("message_font_weight", 400))
         radius = int(notification.get("border_radius", 12))
         padding = notification.get("padding", [12, 16])
         width = int(notification.get("width", 360))
@@ -66,13 +70,14 @@ class OversizedItemPopup(QWidget):
             }}
             QLabel#oversizedItemTitle {{
                 color: {text};
-                font-size: 14px;
-                font-weight: 600;
+                font-size: {title_font_size}px;
+                font-weight: {title_font_weight};
                 border: none;
             }}
             QLabel#oversizedItemMessage {{
                 color: {muted_text};
-                font-size: 12px;
+                font-size: {message_font_size}px;
+                font-weight: {message_font_weight};
                 border: none;
             }}
         """)
