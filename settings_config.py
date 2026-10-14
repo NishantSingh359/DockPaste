@@ -27,7 +27,7 @@ PALETTE = {
     "control_border": "#303030",
     "control_hover_border": "#303030",
     "control_focus_border": "#55555A",
-    "text": "#F5F5F7",
+    "text": "#D2D2D2",
     "secondary_text": "#A1A1A6",
     "accent": "#0071E3",
     "white": "#D4D4D4",
@@ -52,7 +52,7 @@ FONT = {
     "control_weight": 600,
 }
 
-SIDEBAR_WIDTH = 230
+SIDEBAR_WIDTH = 260
 SIDEBAR_SPACING = 4
 SIDEBAR_PADDING = (18, 10)
 NAV_ITEM_SIZE = (206, 46)

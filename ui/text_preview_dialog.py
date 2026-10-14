@@ -45,12 +45,11 @@ class TextPreviewDialog(QDialog):
         )
 
     def set_theme(self, theme):
-        settings = (theme or {}).get("settings", {})
         preview_theme = (theme or {}).get("text_preview", {})
-        background = preview_theme.get("background", settings.get("background", "#202124"))
-        foreground = preview_theme.get("text", settings.get("text", "#e5e7eb"))
-        accent = preview_theme.get("selection", settings.get("checkbox_checked", "#5677c8"))
-        font_size = int(preview_theme.get("font_size", settings.get("font_size", 13)))
+        background = preview_theme.get("background", "#202124")
+        foreground = preview_theme.get("text", "#e5e7eb")
+        accent = preview_theme.get("selection", "#5677c8")
+        font_size = int(preview_theme.get("font_size", 13))
         font_family = preview_theme.get("font_family", "Segoe UI")
         self._layout.setContentsMargins(*preview_theme.get("padding", [12, 12, 12, 12]))
         self.preview.setFont(QFont(font_family, font_size))

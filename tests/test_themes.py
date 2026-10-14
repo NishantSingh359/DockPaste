@@ -45,14 +45,12 @@ class TestThemeManager(unittest.TestCase):
     def test_behavioral_settings_are_not_defined_in_theme(self):
         theme = ThemeManager().get_theme(DEFAULT_THEME)
         chip_theme = theme.get("chip", {})
-        settings_theme = theme.get("settings", {})
 
         self.assertNotIn("min_width", chip_theme)
         self.assertNotIn("max_width", chip_theme)
         self.assertNotIn("max_chips", chip_theme)
         self.assertNotIn("color_preview_enabled", chip_theme)
-        self.assertNotIn("chip_width_min_limit", settings_theme)
-        self.assertNotIn("chip_width_max_limit", settings_theme)
+        self.assertNotIn("settings", theme)
 
     def test_each_builtin_theme_defines_edge_fade_customization(self):
         themes = ThemeManager()

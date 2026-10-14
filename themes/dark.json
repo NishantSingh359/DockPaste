@@ -75,33 +75,6 @@
     "clear_icon": "<path d=\"m16 22-1-4\"/><path d=\"M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1\"/><path d=\"M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z\"/><path d=\"m8 22 1-4\"/>"
   },
 
-  "settings": {
-    "window_title": "Settings",
-    "background": "#202124",
-    "text": "#c0c0c0",
-    "heading": "#c0c0c0",
-    "font_size": 13,
-    "heading_font_size": 17,
-    "heading_font_weight": 600,
-    "content_margins": [20, 18, 20, 16],
-    "layout_spacing": 10,
-    "section_spacing": 18,
-    "heading_bottom_padding": 6,
-    "checkbox_spacing": 10,
-    "checkbox_padding": [5, 2],
-    "checkbox_indicator_size": 16,
-    "checkbox_border": "#666a70",
-    "checkbox_border_radius": 4,
-    "checkbox_background": "#292b2f",
-    "checkbox_checked": "#8F993E",
-    "button_min_width": 64,
-    "button_padding": [6, 12],
-    "button_background": "#34373b",
-    "button_border": "#45494e",
-    "button_border_radius": 5,
-    "button_hover": "#41454a"
-  },
-
   "empty": {
     "text": "Nothing Here",
     "text_color": "rgba(100, 100, 100, 1)",

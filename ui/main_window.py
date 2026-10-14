@@ -1135,7 +1135,7 @@ class MainWindow(QWidget):
             on_theme=self.set_theme,
             parent=None,
         )
-        self._settings_dialog.setWindowIcon(self.tray_icon.icon())
+        self._settings_dialog.setWindowIcon(create_app_icon())
         self._settings_dialog.show()
 
     @safe_slot("Failed to clear clipboard history")
