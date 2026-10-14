@@ -91,6 +91,7 @@ from config import (
     SHELF_AUTO_HIDE_DELAY
 )
 from utils.app_logging import log_exception, safe_slot
+from utils.app_icon import create_app_icon
 
 
 class ShelfContainer(QWidget):
@@ -1066,8 +1067,7 @@ class MainWindow(QWidget):
             log_exception(f"Failed to save context menu settings: {exc}")
 
     def _create_tray_icon(self):
-        icon_path = Path(__file__).resolve().parent.parent / "assets" / "app.ico"
-        self.tray_icon = QSystemTrayIcon(QIcon(str(icon_path)), self)
+        self.tray_icon = QSystemTrayIcon(create_app_icon(), self)
         self.tray_icon.setToolTip(APP_NAME)
 
         tray_menu = QMenu(self)

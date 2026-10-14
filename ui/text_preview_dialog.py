@@ -1,10 +1,9 @@
-from pathlib import Path
-
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QFont, QFontMetrics, QIcon
+from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QApplication, QDialog, QPlainTextEdit, QVBoxLayout
 
 from config import APP_NAME
+from utils.app_icon import create_app_icon
 
 
 class TextPreviewDialog(QDialog):
@@ -15,9 +14,7 @@ class TextPreviewDialog(QDialog):
         self.setWindowTitle(APP_NAME)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        icon_path = Path(__file__).resolve().parent.parent / "assets" / "app.ico"
-        if icon_path.is_file():
-            self.setWindowIcon(QIcon(str(icon_path)))
+        self.setWindowIcon(create_app_icon())
 
         self.preview = QPlainTextEdit(self)
         self.preview.setReadOnly(True)
