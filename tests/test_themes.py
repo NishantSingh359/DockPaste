@@ -32,14 +32,14 @@ class TestThemeManager(unittest.TestCase):
             themes.available_themes(),
             [
                 ("dark", "Dark"),
-                ("dracula", "Dracula"),
-                ("one_dark_pro_night_flat", "One Dark Pro Night Flat"),
+                ("dark_pro", "Dark Pro"),
             ],
         )
         self.assertTrue(themes.is_valid(DEFAULT_THEME))
         self.assertTrue(themes.is_valid("DARK"))
-        self.assertTrue(themes.is_valid("Dracula"))
-        self.assertTrue(themes.is_valid("One_Dark_Pro_Night_Flat"))
+        self.assertTrue(themes.is_valid("Dark_Pro"))
+        self.assertFalse(themes.is_valid("dracula"))
+        self.assertEqual(themes.get_theme("one_dark_pro_night_flat")["name"], "dark_pro")
         self.assertFalse(themes.is_valid("light"))
 
     def test_behavioral_settings_are_not_defined_in_theme(self):

@@ -7,6 +7,7 @@ from config import BASE_DIR
 
 THEME_DIR = BASE_DIR / "themes"
 DEFAULT_THEME = "dark"
+LEGACY_THEME_NAMES = {"one_dark_pro_night_flat": "dark_pro"}
 
 
 class ThemeManager:
@@ -40,6 +41,7 @@ class ThemeManager:
 
     def get_theme(self, name):
         theme_name = str(name or DEFAULT_THEME).lower()
+        theme_name = LEGACY_THEME_NAMES.get(theme_name, theme_name)
         if theme_name not in self._themes:
             theme_name = DEFAULT_THEME
         theme = self._themes.get(theme_name, self._themes[DEFAULT_THEME])

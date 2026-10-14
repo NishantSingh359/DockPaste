@@ -1131,11 +1131,31 @@ class MainWindow(QWidget):
             on_shelf_width_ratio=self.set_shelf_width_ratio,
             on_history_date=self.set_history_date_filter,
             on_history_retention_days=self.set_history_retention_days,
+            on_clear_all_history=self.clear_all_history,
             on_theme=self.set_theme,
             parent=None,
         )
         self._settings_dialog.setWindowIcon(self.tray_icon.icon())
         self._settings_dialog.show()
+
+    @safe_slot("Failed to clear clipboard history")
+    def clear_all_history(self):
+        database = self.clipboard_manager.get_db()
+        database.clear()
+        self.clipboard_manager.image_store.clear_thumbnails()
+
+        self._history_date_filter = date.today().isoformat()
+        self._show_history_records([])
+        if hasattr(self, "empty_state_widget"):
+            self.empty_state_widget.setVisible(True)
+
+        if self._settings_dialog is not None:
+            combo = self._settings_dialog.history_date_combo
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem(self._history_date_filter, self._history_date_filter)
+            combo.setCurrentIndex(0)
+            combo.blockSignals(False)
 
     def set_max_chips(self, max_chips):
         self.max_chips = max(MAX_CHIPS_MIN, min(MAX_CHIPS_MAX, int(max_chips)))

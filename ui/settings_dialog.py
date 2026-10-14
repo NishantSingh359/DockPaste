@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QStackedWidget,
@@ -149,6 +151,7 @@ class SettingsDialog(QDialog):
         on_shelf_width_ratio,
         on_history_date,
         on_history_retention_days,
+        on_clear_all_history,
         on_theme,
         parent=None,
     ):
@@ -171,6 +174,8 @@ class SettingsDialog(QDialog):
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sidebar.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.pages = QStackedWidget()
+        self.pages.setObjectName("settingsPages")
+        self.pages.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         root.addWidget(self.sidebar)
         root.addWidget(self.pages, 1)
 
@@ -271,6 +276,18 @@ class SettingsDialog(QDialog):
         )
         self.history_retention_days.valueChanged.connect(on_history_retention_days)
         self._add_control_row(history_card, "Keep History For", "Older clips are removed automatically.", self.history_retention_days)
+        self.clear_history_button = QPushButton("Clear All History")
+        self.clear_history_button.setObjectName("clearHistoryButton")
+        self.clear_history_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_history_button.clicked.connect(
+            lambda: self._confirm_clear_history(on_clear_all_history)
+        )
+        self._add_control_row(
+            history_card,
+            "Clear All History",
+            "Permanently delete every saved clip and stored image.",
+            self.clear_history_button,
+        )
         self._add_page(history)
 
         self.set_theme(theme)
@@ -296,6 +313,8 @@ class SettingsDialog(QDialog):
 
     def _new_page(self, title, subtitle):
         page = QWidget()
+        page.setObjectName("settingsPage")
+        page.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(*appearance.PAGE_MARGINS)
         page_layout.setSpacing(appearance.PAGE_SPACING)
@@ -349,6 +368,8 @@ class SettingsDialog(QDialog):
 
     def _add_page(self, page):
         scroll = QScrollArea()
+        scroll.setObjectName("settingsPageScroll")
+        scroll.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -454,6 +475,22 @@ class SettingsDialog(QDialog):
         self.oversize_warning.setEnabled(bool(prevention_enabled))
         if not prevention_enabled and self.oversize_warning.isChecked():
             self.oversize_warning.setChecked(False)
+
+    def _confirm_clear_history(self, callback):
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.NoIcon)
+        dialog.setWindowTitle("Clear All History")
+        dialog.setText("Clear All History?")
+        dialog.setInformativeText("This permanently deletes all saved clips and images.")
+        cancel_button = dialog.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        clear_button = dialog.addButton("Clear All History", QMessageBox.ButtonRole.DestructiveRole)
+        clear_button.setObjectName("confirmClearButton")
+        dialog.setDefaultButton(cancel_button)
+        dialog.setEscapeButton(cancel_button)
+        dialog.setStyleSheet(appearance.confirmation_stylesheet())
+        dialog.exec()
+        if dialog.clickedButton() is clear_button:
+            callback()
 
 
 class MacSwitch(QCheckBox):

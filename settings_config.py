@@ -7,10 +7,10 @@ consistent when the user changes the appearance of the shelf.
 import sys
 from pathlib import Path
 
-WINDOW_TITLE = "DockPaste Settings"
+WINDOW_TITLE = "Settings"
 WINDOW_SIZE = (900, 700)
 WINDOW_MIN_SIZE = (900, 700)
-WINDOW_MAX_SIZE = (11000, 900)
+WINDOW_MAX_SIZE = (1100, 900)
 ROOT_MARGINS = (0, 0, 0, 0)
 ROOT_SPACING = 0
 FONT_FAMILY = "Inter"
@@ -126,6 +126,9 @@ def settings_stylesheet():
     f = FONT
     return f"""
         QDialog {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {f['dialog_size']}px; }}
+        QStackedWidget#settingsPages {{ background: {p['background']}; }}
+        QScrollArea#settingsPageScroll {{ background: {p['background']}; border: none; }}
+        QWidget#settingsPage {{ background: {p['background']}; }}
         QListWidget#settingsSidebar {{ background: {p['surface']}; border: none; padding: {SIDEBAR_PADDING[0]}px {SIDEBAR_PADDING[1]}px; outline: none; }}
         QListWidget#settingsSidebar::item {{ background: transparent; border: none; padding: 0; margin: {NAV_ITEM_MARGINS[0]}px {NAV_ITEM_MARGINS[1]}px; }}
         QWidget#settingsNavRow {{ background: transparent; border-radius: {NAV_ROW_RADIUS}px; }}
@@ -134,6 +137,9 @@ def settings_stylesheet():
         QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: 2px; }}
         QFrame#settingsCard {{ background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
+        QPushButton#clearHistoryButton {{ color: #FF6961; background: {p['control_background']}; border: 1px solid {p['border']}; border-radius: 8px; padding: 8px 12px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
+        QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: #FF6961; }}
+        QPushButton#clearHistoryButton:pressed {{ background: {p['surface_hover']}; }}
         QLabel#settingTitle {{ color: {p['text']}; font-size: {f['setting_title_size']}px; font-weight: {f['setting_title_weight']}; }}
         QLabel#settingDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
         QCheckBox#settingsSwitch {{ background: transparent; border: none; }}
@@ -145,6 +151,18 @@ def settings_stylesheet():
         QScrollBar:vertical {{ background: transparent; width: 10px; margin: 4px 2px; }}
         QScrollBar::handle:vertical {{ background: {p['border']}; min-height: 28px; border-radius: 4px; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+    """
+
+
+def confirmation_stylesheet():
+    p = PALETTE
+    return f"""
+        QMessageBox {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
+        QMessageBox QLabel {{ color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
+        QMessageBox QPushButton {{ color: {p['text']}; background: {p['surface']}; border: 1px solid {p['border']}; border-radius: 7px; padding: 7px 14px; min-width: 76px; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; font-weight: 500; }}
+        QMessageBox QPushButton:hover {{ background: {p['surface_hover']}; }}
+        QMessageBox QPushButton:focus {{ border-color: {p['control_focus_border']}; outline: none; }}
+        QMessageBox QPushButton#confirmClearButton {{ color: #FF6961; }}
     """
 
 

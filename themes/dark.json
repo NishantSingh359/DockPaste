@@ -76,7 +76,7 @@
   },
 
   "settings": {
-    "window_title": "DockPaste Settings",
+    "window_title": "Settings",
     "background": "#202124",
     "text": "#c0c0c0",
     "heading": "#c0c0c0",
@@ -126,10 +126,10 @@
   },
 
   "text_preview": {
-    "background": "2141414",
+    "background": "#141414",
     "text": "#c0c0c0",
     "selection": "#8F993E",
-    "font_family": "Segoe UI",
+    "font_family": "Inter",
     "font_size": 13,
     "padding": [12, 12, 12, 12]
   },
