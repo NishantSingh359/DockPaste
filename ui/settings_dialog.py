@@ -98,7 +98,7 @@ class SettingsNavIcon(QWidget):
             self.update()
 
     def paintEvent(self, event):
-        color = appearance.PALETTE["white"] if self._active else appearance.PALETTE["secondary_text"]
+        color = appearance.PALETTE["white"] if self._active else appearance.PALETTE["accent"]
         svg = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{appearance.NAV_ICON_VIEWBOX_SIZE}" height="{appearance.NAV_ICON_VIEWBOX_SIZE}" '
             f'viewBox="0 0 {appearance.NAV_ICON_VIEWBOX_SIZE} {appearance.NAV_ICON_VIEWBOX_SIZE}" fill="none" stroke="{color}" '
@@ -164,9 +164,18 @@ class SettingsDialog(QDialog):
         root.setContentsMargins(*appearance.ROOT_MARGINS)
         root.setSpacing(appearance.ROOT_SPACING)
 
+        self.sidebar_panel = QFrame()
+        self.sidebar_panel.setObjectName("settingsControlPanel")
+        self.sidebar_panel.setFixedWidth(appearance.SIDEBAR_WIDTH)
+        sidebar_panel_layout = QVBoxLayout(self.sidebar_panel)
+        sidebar_panel_layout.setContentsMargins(*appearance.SIDEBAR_PANEL_MARGINS)
+        sidebar_panel_layout.setSpacing(0)
+
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("settingsSidebar")
-        self.sidebar.setFixedWidth(appearance.SIDEBAR_WIDTH)
+        self.sidebar.setFixedWidth(
+            appearance.SIDEBAR_WIDTH - 2 * appearance.SIDEBAR_PANEL_INSET
+        )
         self.sidebar.setSpacing(appearance.SIDEBAR_SPACING)
         self.sidebar.setFrameShape(QFrame.NoFrame)
         self.sidebar.setFocusPolicy(Qt.NoFocus)
@@ -176,7 +185,8 @@ class SettingsDialog(QDialog):
         self.pages = QStackedWidget()
         self.pages.setObjectName("settingsPages")
         self.pages.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        root.addWidget(self.sidebar)
+        sidebar_panel_layout.addWidget(self.sidebar)
+        root.addWidget(self.sidebar_panel)
         root.addWidget(self.pages, 1)
 
         self._nav_rows = []

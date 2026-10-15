@@ -11,8 +11,8 @@ WINDOW_TITLE = "Settings"
 WINDOW_SIZE = (900, 770)
 WINDOW_MIN_SIZE = (900, 770)
 WINDOW_MAX_SIZE = (1100, 1000)
-ROOT_MARGINS = (0, 0, 0, 0)
-ROOT_SPACING = 0
+ROOT_MARGINS = (12, 12, 12, 12)
+ROOT_SPACING = 12
 FONT_FAMILY = "Inter"
 _BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 FONT_FILE = _BUNDLE_ROOT / "assets" / "fonts" / "Inter-Variable.ttf"
@@ -54,11 +54,14 @@ FONT = {
 }
 
 SIDEBAR_WIDTH = 260
+SIDEBAR_PANEL_INSET = 8
+SIDEBAR_PANEL_MARGINS = (SIDEBAR_PANEL_INSET,) * 4
+SIDEBAR_PANEL_RADIUS = 16
 SIDEBAR_SPACING = 4
 SIDEBAR_PADDING = (18, 10)
 NAV_ITEM_MARGINS = (2, 3, 2, 3)
 NAV_ITEM_SIZE = (
-    SIDEBAR_WIDTH - 2 * SIDEBAR_PADDING[1] - 2 * NAV_ITEM_MARGINS[1],
+    SIDEBAR_WIDTH - 2 * SIDEBAR_PANEL_INSET - 2 * SIDEBAR_PADDING[1] - 2 * NAV_ITEM_MARGINS[1],
     46,
 )
 NAV_ROW_MARGINS = (10, 0, 8, 0)
@@ -156,7 +159,9 @@ def settings_stylesheet():
         QStackedWidget#settingsPages {{ background: {p['background']}; }}
         QScrollArea#settingsPageScroll {{ background: {p['background']}; border: none; }}
         QWidget#settingsPage {{ background: {p['background']}; }}
-        QListWidget#settingsSidebar {{ background: {p['surface']}; border: none; padding: {SIDEBAR_PADDING[0]}px {SIDEBAR_PADDING[1]}px; outline: none; }}
+        QFrame#settingsControlPanel {{ background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {SIDEBAR_PANEL_RADIUS}px; }}
+        QListWidget#settingsSidebar, QListWidget#settingsSidebar::viewport {{ background: transparent; border: none; }}
+        QListWidget#settingsSidebar {{ padding: {SIDEBAR_PADDING[0]}px {SIDEBAR_PADDING[1]}px; outline: none; }}
         QListWidget#settingsSidebar::item {{ background: transparent; border: none; padding: 0; margin: {NAV_ITEM_MARGINS[0]}px {NAV_ITEM_MARGINS[1]}px; }}
         QWidget#settingsNavRow {{ background: transparent; border-radius: {NAV_ROW_RADIUS}px; }}
         QLabel#settingsNavLabel {{ color: {p['text']}; font-weight: {f['sidebar_weight']}; }}
