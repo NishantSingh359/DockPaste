@@ -5,7 +5,13 @@ from PySide6.QtGui import QCursor
 from PySide6.QtGui import QPainterPath, QRegion
 from PySide6.QtWidgets import QScrollArea, QSizePolicy, QWidget
 
-from animation_config import MOTION_ENABLED, CHIP_SCROLL_SPEED, CHIP_SCROLL_DURATION_MS
+from animation_config import (
+    MOTION_ENABLED,
+    CHIP_SCROLL_SPEED,
+    CHIP_SCROLL_SPEED_MIN,
+    CHIP_SCROLL_SPEED_MAX,
+    CHIP_SCROLL_DURATION_MS,
+)
 from ui.animations import EdgeFadeOpacityEffect
 
 
@@ -20,6 +26,7 @@ class ChipBar(QScrollArea):
     def __init__(self, theme=None):
         super().__init__()
         self.theme = theme or {"scroll_viewport": {"border_radius": 40}}
+        self.scroll_speed = CHIP_SCROLL_SPEED
 
         self.setWidgetResizable(True)
         self.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -42,6 +49,12 @@ class ChipBar(QScrollArea):
         self._edge_fade_update_pending = False
 
         self._update_viewport_mask()
+
+    def set_scroll_speed(self, speed):
+        self.scroll_speed = max(
+            CHIP_SCROLL_SPEED_MIN,
+            min(CHIP_SCROLL_SPEED_MAX, int(speed)),
+        )
 
     def set_theme(self, theme):
         self.theme = theme or {}
@@ -235,7 +248,7 @@ class ChipBar(QScrollArea):
         else:
             base_value = self._scroll_value
             
-        raw_target = base_value - (delta * CHIP_SCROLL_SPEED)
+        raw_target = base_value - (delta * self.scroll_speed)
         self._target_scroll_value = raw_target
         
         target = max(min_val, min(max_val, raw_target))

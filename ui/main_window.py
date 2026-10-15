@@ -54,6 +54,7 @@ from ui.notification_popup import OversizedItemPopup
 from ui.text_preview_dialog import TextPreviewDialog
 from ui.animations import EdgeFadeOpacityEffect, fade, parse_color
 from ui.theme_manager import ThemeManager, get_theme_value, set_active_theme
+import settings_config as settings_appearance
 from animation_config import (
     CHIP_CONTEXT_MENU_FADE_OUT_MS,
     CHIP_LAYOUT_ANIMATION_MS,
@@ -63,6 +64,9 @@ from animation_config import (
     SHELF_CHIP_REVEAL_MS,
     SHELF_CHIP_REVEAL_STAGGER_MS,
     SHELF_CHIP_REVEAL_OFFSET,
+    CHIP_SCROLL_SPEED,
+    CHIP_SCROLL_SPEED_MIN,
+    CHIP_SCROLL_SPEED_MAX,
 )
 from config import (
     APP_NAME,
@@ -102,6 +106,7 @@ class ShelfContainer(QWidget):
         self.setObjectName("shelfContainer")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.theme = theme
+        self.drop_target_active = False
         self._set_theme_values()
 
     def _set_theme_values(self):
@@ -130,6 +135,13 @@ class ShelfContainer(QWidget):
     def set_theme(self, theme):
         self.theme = theme
         self._set_theme_values()
+
+    def set_drop_target_active(self, active):
+        active = bool(active)
+        if self.drop_target_active == active:
+            return
+        self.drop_target_active = active
+        self.update()
     
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -137,8 +149,9 @@ class ShelfContainer(QWidget):
         
         path = QPainterPath()
         rect = self.rect()
-        if self.border_width > 0:
-            margin = self.border_width / 2.0
+        border_width = max(self.border_width, 2.0) if self.drop_target_active else self.border_width
+        if border_width > 0:
+            margin = border_width / 2.0
             rect_f = rect.toRectF().adjusted(margin, margin, -margin, -margin)
         else:
             rect_f = rect.toRectF()
@@ -148,11 +161,15 @@ class ShelfContainer(QWidget):
         bg_color = parse_color(self.background_color)
         painter.fillPath(path, bg_color)
         
-        if self.border_width > 0:
-            border_color = parse_color(self.border_color)
+        if border_width > 0:
+            border_color = parse_color(
+                settings_appearance.PALETTE["accent"]
+                if self.drop_target_active
+                else self.border_color
+            )
             pen = painter.pen()
             pen.setColor(border_color)
-            pen.setWidth(self.border_width)
+            pen.setWidthF(border_width)
             painter.setPen(pen)
             painter.drawPath(path)
         
@@ -182,6 +199,9 @@ class MainWindow(QWidget):
         self.theme = self.theme_manager.get_theme(self.theme_name)
         self.show_on_hover_enabled = SHELF_SHOW_ON_HOVER
         self.hide_on_paste_enabled = HIDE_ON_PASTE
+        self.highlight_shelf_on_drag_enabled = True
+        self._is_drag_over_shelf = False
+        self.clip_scroll_speed = CHIP_SCROLL_SPEED
         self.clip_indexing_enabled = clip_indexing
         self.color_preview_enabled = COLOR_PREVIEW_ENABLED
         self.text_preview_on_double_click_enabled = False
@@ -306,6 +326,7 @@ class MainWindow(QWidget):
         container_layout.setSpacing(int(shelf_theme.get("spacing", 5)))
 
         self.scroll = ChipBar(self.theme)
+        self.scroll.set_scroll_speed(self.clip_scroll_speed)
         self.scroll.setFixedHeight(
             int(shelf_theme.get("height", 52)) - int(shelf_padding[1]) - int(shelf_padding[3])
         )
@@ -777,25 +798,36 @@ class MainWindow(QWidget):
     @safe_slot("Failed to process drag enter")
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("application/x-copypin-chip"):
+            self._set_drop_target_hovered(False)
             event.ignore()
             return
         if self.dragdrop_handler.can_accept(event.mimeData()):
+            self._set_drop_target_hovered(True)
             event.acceptProposedAction()
         else:
+            self._set_drop_target_hovered(False)
             event.ignore()
 
     @safe_slot("Failed to process drag move")
     def dragMoveEvent(self, event):
         if event.mimeData().hasFormat("application/x-copypin-chip"):
+            self._set_drop_target_hovered(False)
             event.ignore()
             return
         if self.dragdrop_handler.can_accept(event.mimeData()):
+            self._set_drop_target_hovered(True)
             event.acceptProposedAction()
         else:
+            self._set_drop_target_hovered(False)
             event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._set_drop_target_hovered(False)
+        super().dragLeaveEvent(event)
 
     @safe_slot("Failed to process drop")
     def dropEvent(self, event):
+        self._set_drop_target_hovered(False)
         if event.mimeData().hasFormat("application/x-copypin-chip"):
             event.ignore()
             return
@@ -824,6 +856,27 @@ class MainWindow(QWidget):
     # -------------------------
     # HOVER DETECTION
     # -------------------------
+
+    def _set_drop_target_hovered(self, hovered):
+        self._is_drag_over_shelf = bool(hovered)
+        if hasattr(self, "container"):
+            self.container.set_drop_target_active(
+                self._is_drag_over_shelf and self.highlight_shelf_on_drag_enabled
+            )
+
+    def set_highlight_shelf_on_drag_enabled(self, enabled):
+        self.highlight_shelf_on_drag_enabled = bool(enabled)
+        self._set_drop_target_hovered(self._is_drag_over_shelf)
+        self._save_context_menu_settings()
+
+    def set_clip_scroll_speed(self, speed):
+        self.clip_scroll_speed = max(
+            CHIP_SCROLL_SPEED_MIN,
+            min(CHIP_SCROLL_SPEED_MAX, int(speed)),
+        )
+        if hasattr(self, "scroll"):
+            self.scroll.set_scroll_speed(self.clip_scroll_speed)
+        self._save_context_menu_settings()
 
     def set_show_on_hover_enabled(self, enabled):
         self.show_on_hover_enabled = bool(enabled)
@@ -982,6 +1035,19 @@ class MainWindow(QWidget):
             )
             self.show_on_hover_enabled = bool(settings.get("show_on_hover_enabled", self.show_on_hover_enabled))
             self.hide_on_paste_enabled = bool(settings.get("hide_on_paste_enabled", self.hide_on_paste_enabled))
+            self.highlight_shelf_on_drag_enabled = bool(
+                settings.get(
+                    "highlight_shelf_on_drag_enabled",
+                    self.highlight_shelf_on_drag_enabled,
+                )
+            )
+            self.clip_scroll_speed = max(
+                CHIP_SCROLL_SPEED_MIN,
+                min(
+                    CHIP_SCROLL_SPEED_MAX,
+                    int(settings.get("clip_scroll_speed", self.clip_scroll_speed)),
+                ),
+            )
             self.clip_indexing_enabled = bool(settings.get("clip_indexing_enabled", self.clip_indexing_enabled))
             self.color_preview_enabled = bool(settings.get("color_preview_enabled", self.color_preview_enabled))
             self.text_preview_on_double_click_enabled = bool(
@@ -1048,6 +1114,8 @@ class MainWindow(QWidget):
                     {
                         "show_on_hover_enabled": self.show_on_hover_enabled,
                         "hide_on_paste_enabled": self.hide_on_paste_enabled,
+                        "highlight_shelf_on_drag_enabled": self.highlight_shelf_on_drag_enabled,
+                        "clip_scroll_speed": self.clip_scroll_speed,
                         "clip_indexing_enabled": self.clip_indexing_enabled,
                         "color_preview_enabled": self.color_preview_enabled,
                         "text_preview_on_double_click_enabled": self.text_preview_on_double_click_enabled,
@@ -1103,6 +1171,8 @@ class MainWindow(QWidget):
         self._settings_dialog = SettingsDialog(
             show_on_hover=self.show_on_hover_enabled,
             hide_on_paste=self.hide_on_paste_enabled,
+            highlight_shelf_on_drag=self.highlight_shelf_on_drag_enabled,
+            clip_scroll_speed=self.clip_scroll_speed,
             show_clip_indexes=self.clip_indexing_enabled,
             color_preview_enabled=self.color_preview_enabled,
             text_preview_on_double_click=self.text_preview_on_double_click_enabled,
@@ -1127,6 +1197,8 @@ class MainWindow(QWidget):
             theme=self.theme,
             on_show_on_hover=self.set_show_on_hover_enabled,
             on_hide_on_paste=self.set_hide_on_paste_enabled,
+            on_highlight_shelf_on_drag=self.set_highlight_shelf_on_drag_enabled,
+            on_clip_scroll_speed=self.set_clip_scroll_speed,
             on_show_clip_indexes=self.set_clip_indexing_enabled,
             on_color_preview=self.set_color_preview_enabled,
             on_text_preview_on_double_click=self.set_text_preview_on_double_click_enabled,

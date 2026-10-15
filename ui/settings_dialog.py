@@ -32,6 +32,7 @@ from config import (
     SHELF_WIDTH_RATIO_MAX,
     SHELF_WIDTH_RATIO_MIN,
 )
+from animation_config import CHIP_SCROLL_SPEED_MIN, CHIP_SCROLL_SPEED_MAX
 import settings_config as appearance
 
 
@@ -117,6 +118,8 @@ class SettingsDialog(QDialog):
         *,
         show_on_hover,
         hide_on_paste,
+        highlight_shelf_on_drag,
+        clip_scroll_speed,
         show_clip_indexes,
         color_preview_enabled,
         text_preview_on_double_click,
@@ -137,6 +140,8 @@ class SettingsDialog(QDialog):
         theme,
         on_show_on_hover,
         on_hide_on_paste,
+        on_highlight_shelf_on_drag,
+        on_clip_scroll_speed,
         on_show_clip_indexes,
         on_color_preview,
         on_text_preview_on_double_click,
@@ -204,6 +209,13 @@ class SettingsDialog(QDialog):
         self.hide_on_paste = self._add_switch(
             general_card, "Hide Shelf After Pasting", "Dismiss the shelf after you choose a clip.", hide_on_paste, on_hide_on_paste
         )
+        self.highlight_shelf_on_drag = self._add_switch(
+            general_card,
+            "Highlight Shelf While Dragging",
+            "Show the accent border when an item can be dropped on the shelf.",
+            highlight_shelf_on_drag,
+            on_highlight_shelf_on_drag,
+        )
         self.close_to_tray = self._add_switch(
             general_card, "Keep Running When Closed", "Keep clipboard monitoring active from the system tray.", close_to_tray, on_close_to_tray
         )
@@ -245,6 +257,19 @@ class SettingsDialog(QDialog):
         )
         self.color_preview = self._add_switch(
             appearance_card, "Show Color Previews", "Show a swatch for copied color values.", color_preview_enabled, on_color_preview
+        )
+        self.clip_scroll_speed = self._spin(
+            clip_scroll_speed,
+            CHIP_SCROLL_SPEED_MIN,
+            CHIP_SCROLL_SPEED_MAX,
+            "×",
+        )
+        self.clip_scroll_speed.valueChanged.connect(on_clip_scroll_speed)
+        self._add_control_row(
+            appearance_card,
+            "Clip Scroll Speed",
+            "Adjust how far the shelf scrolls with each mouse wheel movement.",
+            self.clip_scroll_speed,
         )
 
         sizing_card = self._card(appearance_page)
