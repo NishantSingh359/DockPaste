@@ -407,7 +407,7 @@ class MainWindow(QWidget):
         self.clearMask()
 
     @safe_slot("Failed to add clipboard chip")
-    def add_clip(self, content, clip_date=None, clip_index=None):
+    def add_clip(self, content, clip_date=None, clip_index=None, pinned=False):
         clip_date = clip_date or date.today().isoformat()
         if (
             self._history_date_filter is not None
@@ -426,7 +426,7 @@ class MainWindow(QWidget):
                 log_exception("Failed to retrieve clipboard index")
 
         self._clip_dates_by_content[content] = clip_date
-        self.add_chip(content, clip_index)
+        self.add_chip(content, clip_index, pinned=pinned)
 
     def set_history_date_filter(self, clip_date):
         clip_date = clip_date or date.today().isoformat()
@@ -447,10 +447,15 @@ class MainWindow(QWidget):
         self._next_chip_number = 1
         for record in records:
             content = record["content"]
-            self.add_clip(content, record["date"], record["index"])
+            self.add_clip(
+                content,
+                record["date"],
+                record["index"],
+                pinned=bool(record.get("pinned", 0)),
+            )
 
     @safe_slot("Failed to create clipboard chip")
-    def add_chip(self, content, clip_index=None):
+    def add_chip(self, content, clip_index=None, pinned=False):
         if content in self.chips_by_content:
             return
 
@@ -464,6 +469,8 @@ class MainWindow(QWidget):
             open_images_on_double_click=self.open_images_on_double_click_enabled,
             theme=self.theme,
         )
+        chip.pinned = bool(pinned)
+        chip.apply_style()
         self._assign_chip_number(chip, clip_index)
         chip.paste_requested.connect(self.paste_clip)
         chip.text_preview_requested.connect(self._show_text_preview)
@@ -583,6 +590,17 @@ class MainWindow(QWidget):
         chip = self.chips_by_content.get(content)
         if not chip or getattr(chip, "_is_deleting", False):
             return
+
+        clip_date = self._clip_dates_by_content.get(content)
+        if clip_date is not None:
+            try:
+                self.clipboard_manager.get_db().set_pinned(
+                    content,
+                    clip_date,
+                    chip.pinned,
+                )
+            except Exception:
+                log_exception("Failed to save clipboard pin state")
 
         self._finish_chip_position_animation()
         chip._is_reordering = True

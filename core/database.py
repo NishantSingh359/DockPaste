@@ -7,6 +7,7 @@ Schema:
     index   - INTEGER: 1-based order within the date
     type    - TEXT: 'link', 'text', 'path', or 'img'
     content - TEXT: the copied text, link, path, or img file path
+    pinned  - INTEGER: 1 when the clip is pinned, otherwise 0
 """
 
 
@@ -162,6 +163,15 @@ class ClipboardDatabase:
                 self._create_clips_table(conn)
             elif {"date", "index", "type", "content"} - columns:
                 self._migrate_legacy_table(conn)
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(clips)").fetchall()
+            }
+            if "pinned" not in columns:
+                conn.execute(
+                    "ALTER TABLE clips ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 "
+                    "CHECK (pinned IN (0, 1))"
+                )
             self._create_clips_indexes(conn)
             conn.commit()
         finally:
@@ -176,6 +186,7 @@ class ClipboardDatabase:
                 "index" INTEGER NOT NULL CHECK ("index" >= 1),
                 type TEXT NOT NULL,
                 content TEXT NOT NULL,
+                pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
                 PRIMARY KEY (date, "index"),
                 UNIQUE (date, content)
             )
@@ -298,7 +309,7 @@ class ClipboardDatabase:
         try:
             rows = conn.execute(
                 """
-                SELECT rowid AS id, date, "index", type, content
+                SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 ORDER BY date DESC, "index" DESC
                 LIMIT ? OFFSET ?
@@ -331,9 +342,37 @@ class ClipboardDatabase:
         try:
             rows = conn.execute(
                 """
-                SELECT rowid AS id, date, "index", type, content
+                SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE date = ?
+                ORDER BY "index" DESC
+                """,
+                (clip_date,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def set_pinned(self, content: str, clip_date: str, pinned: bool) -> bool:
+        """Persist a clip's pin state for its specific history date."""
+        def operation(conn):
+            cursor = conn.execute(
+                "UPDATE clips SET pinned = ? WHERE date = ? AND content = ?",
+                (int(bool(pinned)), clip_date, content),
+            )
+            return cursor.rowcount > 0
+
+        return self._write_with_retry(operation)
+
+    def get_pinned(self, clip_date: str) -> list[dict]:
+        """Return pinned clips for a local calendar date, newest first."""
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT rowid AS id, date, "index", type, content, pinned
+                FROM clips
+                WHERE date = ? AND pinned = 1
                 ORDER BY "index" DESC
                 """,
                 (clip_date,),
@@ -370,7 +409,7 @@ class ClipboardDatabase:
         try:
             rows = conn.execute(
                 """
-                SELECT rowid AS id, date, "index", type, content
+                SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE type = ?
                 ORDER BY date DESC, "index" DESC
@@ -396,7 +435,7 @@ class ClipboardDatabase:
         try:
             row = conn.execute(
                 """
-                SELECT rowid AS id, date, "index", type, content
+                SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE rowid = ?
                 """,
@@ -422,7 +461,7 @@ class ClipboardDatabase:
         try:
             rows = conn.execute(
                 """
-                SELECT rowid AS id, date, "index", type, content
+                SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE content LIKE ?
                 ORDER BY date DESC, "index" DESC
