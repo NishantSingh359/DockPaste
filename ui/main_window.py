@@ -333,7 +333,10 @@ class MainWindow(QWidget):
         )
         self.empty_state_layout.setSpacing(int(empty_theme.get("icon_spacing", 5)))
 
-        self.empty_state_icon = QLabel()
+        # Parent the icon before making it visible. Without a parent, Qt treats
+        # this 22x22 QLabel as a top-level window and briefly flashes it at the
+        # center of the screen during startup.
+        self.empty_state_icon = QLabel(self.empty_state_widget)
         self.empty_state_icon.setAlignment(Qt.AlignCenter)
         icon_size = int(empty_theme.get("icon_size", 22))
         self.empty_state_icon.setFixedSize(icon_size, icon_size)
