@@ -49,6 +49,7 @@ from core.paste_controller import PasteController
 from ui.chip_bar import ChipBar
 from ui.chip_widget import ChipContextMenu, ChipWidget
 from ui.settings_dialog import SettingsDialog
+import tray_menu_config
 from ui.notification_popup import OversizedItemPopup
 from ui.text_preview_dialog import TextPreviewDialog
 from ui.animations import EdgeFadeOpacityEffect, fade, parse_color
@@ -1071,9 +1072,15 @@ class MainWindow(QWidget):
         self.tray_icon.setToolTip(APP_NAME)
 
         tray_menu = QMenu(self)
-        tray_menu.addAction("Settings", self.open_settings)
+        settings_action = tray_menu.addAction("Settings")
+        settings_action.triggered.connect(self.open_settings)
         tray_menu.addSeparator()
-        tray_menu.addAction("Exit", self.exit_application)
+        exit_action = tray_menu.addAction("Exit")
+        exit_action.triggered.connect(self.exit_application)
+        tray_menu_config.style_menu(
+            tray_menu,
+            {settings_action: "settings", exit_action: "exit"},
+        )
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
