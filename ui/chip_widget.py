@@ -161,6 +161,7 @@ class ChipWidget(QWidget):
         self.network = None
         self._destroyed = False
         self._is_hovered = False
+        self._is_pressed = False
         self._is_deleting = False
         self._drag_start_position = None
         self._dragging = False
@@ -276,10 +277,22 @@ class ChipWidget(QWidget):
             border_color = chip_theme.get("pinned_border", border_color)
         elif self._is_hovered:
             border_color = chip_theme.get("hover_border", border_color)
-        background_color = chip_theme.get(
-            "pinned" if self.pinned else "hover" if self._is_hovered else "default",
-            "rgba(45, 45, 45, 1)" if self.pinned else "rgba(40, 40, 40, 1)" if self._is_hovered else "rgba(35, 35, 35, 1)",
-        )
+        if self.pinned:
+            background_state = "pinned"
+            fallback_background = "rgba(45, 45, 45, 1)"
+        elif self._is_pressed:
+            background_state = "pressed"
+            fallback_background = chip_theme.get(
+                "hover" if self._is_hovered else "default",
+                "rgba(40, 40, 40, 1)" if self._is_hovered else "rgba(35, 35, 35, 1)",
+            )
+        elif self._is_hovered:
+            background_state = "hover"
+            fallback_background = "rgba(40, 40, 40, 1)"
+        else:
+            background_state = "default"
+            fallback_background = "rgba(35, 35, 35, 1)"
+        background_color = chip_theme.get(background_state, fallback_background)
         self.setStyleSheet(f"""
             #chip {{
                 background-color: {color_to_rgba(background_color)};
@@ -824,6 +837,9 @@ class ChipWidget(QWidget):
         if event.button() == Qt.LeftButton:
             self._drag_start_position = event.pos()
             self._dragging = False
+            if not self.pinned:
+                self._is_pressed = True
+                self.apply_style()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -836,6 +852,9 @@ class ChipWidget(QWidget):
             if distance >= QApplication.startDragDistance():
                 self._deferred_click_timer.stop()
                 self._dragging = True
+                if self._is_pressed:
+                    self._is_pressed = False
+                    self.apply_style()
                 self._start_drag()
         super().mouseMoveEvent(event)
 
@@ -866,6 +885,9 @@ class ChipWidget(QWidget):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
+            if self._is_pressed:
+                self._is_pressed = False
+                self.apply_style()
             if self._suppress_next_release:
                 self._suppress_next_release = False
             elif not self._dragging and not self._is_deleting:
