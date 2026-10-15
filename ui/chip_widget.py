@@ -210,7 +210,10 @@ class ChipWidget(QWidget):
         self.layout.setContentsMargins(*chip_theme.get("padding", [10, 0, 10, 0]))
         self.layout.setSpacing(int(chip_theme.get("spacing", 8)))
 
-        self.index_label = QLabel()
+        # Give child labels their owner immediately. The link action icon is
+        # made visible below before layout insertion; without a parent, Qt
+        # briefly displays it as a tiny top-level window during startup.
+        self.index_label = QLabel(self)
         self.index_label.setAlignment(Qt.AlignCenter)
         self.index_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.index_label.setStyleSheet(f"""
@@ -222,7 +225,7 @@ class ChipWidget(QWidget):
         """)
         self.index_label.hide()
 
-        self.icon = QLabel()
+        self.icon = QLabel(self)
         icon_size = int(chip_theme.get("icon_size", 18))
         self.icon.setFixedSize(icon_size, icon_size)
         self.icon.setAlignment(Qt.AlignCenter)
@@ -241,7 +244,7 @@ class ChipWidget(QWidget):
             thumbnail_shadow.setColor(parse_color(thumbnail.get("shadow_color", "rgba(0, 0, 0, 0.45)")))
             self.icon.setGraphicsEffect(thumbnail_shadow)
 
-        self.title = QLabel()
+        self.title = QLabel(self)
         self.title.setAlignment(Qt.AlignVCenter)
         self.title.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.title.setStyleSheet(f"""
@@ -252,7 +255,7 @@ class ChipWidget(QWidget):
             }}
         """)
 
-        self.open_icon = QLabel()
+        self.open_icon = QLabel(self)
         open_icon_size = int(chip_theme.get("open_icon_size", 18))
         self.open_icon.setFixedSize(open_icon_size, open_icon_size)
         self.open_icon.setAlignment(Qt.AlignCenter)
