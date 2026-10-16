@@ -1,5 +1,6 @@
 from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+import ui_config
 
 
 class OversizedItemPopup(QWidget):
@@ -21,16 +22,22 @@ class OversizedItemPopup(QWidget):
         outer_layout.addWidget(self.card)
 
         card_layout = QHBoxLayout(self.card)
-        card_layout.setContentsMargins(14, 12, 16, 12)
-        card_layout.setSpacing(12)
+        vertical_padding, horizontal_padding = ui_config.NOTIFICATION["padding"]
+        card_layout.setContentsMargins(
+            horizontal_padding,
+            vertical_padding,
+            horizontal_padding,
+            vertical_padding,
+        )
+        card_layout.setSpacing(ui_config.NOTIFICATION["card_spacing"])
 
         self.accent = QWidget(self.card)
-        self.accent.setFixedWidth(4)
+        self.accent.setFixedWidth(ui_config.NOTIFICATION["accent_bar_width"])
         card_layout.addWidget(self.accent)
 
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(3)
+        text_layout.setSpacing(ui_config.NOTIFICATION["text_spacing"])
         self.title = QLabel("Item Exceeds 5 MB", self.card)
         self.title.setObjectName("oversizedItemTitle")
         self.message = QLabel(
@@ -60,12 +67,17 @@ class OversizedItemPopup(QWidget):
         radius = int(notification.get("border_radius", 12))
         padding = notification.get("padding", [12, 16])
         width = int(notification.get("width", 360))
+        card_layout = self.card.layout()
+        card_layout.setContentsMargins(
+            padding[1], padding[0], padding[1], padding[0]
+        )
+        self.setFixedWidth(width)
 
         self.card.setStyleSheet(f"""
             QFrame#oversizedItemCard {{
                 background: {background};
                 color: {text};
-                border: 1px solid {border};
+                border: {ui_config.NOTIFICATION['border_width']}px solid {border};
                 border-radius: {radius}px;
             }}
             QLabel#oversizedItemTitle {{
@@ -81,10 +93,12 @@ class OversizedItemPopup(QWidget):
                 border: none;
             }}
         """)
-        self.accent.setStyleSheet(f"background: {accent}; border: none; border-radius: 2px;")
-        layout = self.card.layout()
-        layout.setContentsMargins(padding[1], padding[0], padding[1], padding[0])
-        self.setFixedWidth(width)
+        self.accent.setStyleSheet(
+            "background: {color}; border: none; border-radius: {radius}px;".format(
+                color=accent,
+                radius=ui_config.NOTIFICATION["accent_radius"],
+            )
+        )
         self.adjustSize()
 
         screen = QApplication.primaryScreen()
@@ -92,8 +106,8 @@ class OversizedItemPopup(QWidget):
             available = screen.availableGeometry()
             self.move(
                 QPoint(
-                    available.right() - self.width() - 20,
-                    available.bottom() - self.height() - 20,
+                    available.right() - self.width() - ui_config.NOTIFICATION["screen_edge_margin"],
+                    available.bottom() - self.height() - ui_config.NOTIFICATION["screen_edge_margin"],
                 )
             )
 

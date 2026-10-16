@@ -1,12 +1,14 @@
-"""Visual configuration for the DockPaste Settings window.
+"""Shared layout, typography, and shape configuration for all DockPaste UI.
 
-Keep these values separate from the shelf themes so Settings stays visually
-consistent when the user changes the appearance of the shelf.
+Use this file for dimensions and non-color styling across settings, tray menus,
+the shelf, clips, context menus, previews, and notifications. Theme JSON files
+provide colors only.
 """
 
 import sys
 from pathlib import Path
 
+# Settings window geometry and typography.
 WINDOW_TITLE = "Settings"
 WINDOW_SIZE = (900, 770)
 WINDOW_MIN_SIZE = (900, 770)
@@ -17,26 +19,7 @@ FONT_FAMILY = "Inter"
 _BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 FONT_FILE = _BUNDLE_ROOT / "assets" / "fonts" / "Inter-Variable.ttf"
 
-PALETTE = {
-    "background": "#141414",
-    "surface": "#232323",
-    "surface_hover": "#2E2E31",
-    "border": "#333333",
-    "control_background": "#212121",
-    "control_hover_background": "#212121",
-    "control_border": "#303030",
-    "control_hover_border": "#303030",
-    "control_focus_border": "#55555A",
-    "text": "#D2D2D2",
-    "secondary_text": "#A1A1A6",
-    "accent": "#0071E3",
-    "danger": "#FF6961",
-    "white": "#D4D4D4",
-    "switch_off": "#505050",
-    "switch_disabled": "#323232",
-    "disabled_thumb": "#B8B9BC",
-}
-
+# Shared text metrics.
 FONT = {
     "dialog_size": 13,
     "sidebar_size": 14,
@@ -53,6 +36,7 @@ FONT = {
     "control_weight": 600,
 }
 
+# Settings navigation, pages, and cards.
 SIDEBAR_WIDTH = 260
 SIDEBAR_PANEL_INSET = 8
 SIDEBAR_PANEL_MARGINS = (SIDEBAR_PANEL_INSET,) * 4
@@ -91,13 +75,20 @@ SUBTITLE_BOTTOM_PADDING = 2
 SHELF_WIDTH_DECIMALS = 2
 SHELF_WIDTH_STEP = 0.01
 
+# Settings controls and feedback elements.
 CLEAR_BUTTON_RADIUS = 8
 CLEAR_BUTTON_PADDING = (8, 12)
 CONFIRMATION_BUTTON_RADIUS = 7
 CONFIRMATION_BUTTON_PADDING = (7, 14)
 CONFIRMATION_BUTTON_MIN_WIDTH = 76
 CONFIRMATION_BUTTON_WEIGHT = 500
+SETTINGS_PANEL_BORDER_WIDTH = 1
+SETTINGS_CARD_BORDER_WIDTH = 1
+CONTROL_BORDER_WIDTH = 1
+CONTROL_FOCUS_BORDER_WIDTH = 1
+BUTTON_BORDER_WIDTH = 1
 
+# Shared scrolling, switches, and dropdowns.
 SCROLLBAR_WIDTH = 10
 SCROLLBAR_MARGIN = (4, 2)
 SCROLLBAR_HANDLE_MIN_HEIGHT = 28
@@ -131,6 +122,7 @@ DROPDOWN_ARROW_HALF_HEIGHT = 2
 DROPDOWN_ARROW_STROKE = 1.6
 DROPDOWN_BORDER_WIDTH = 1
 
+# Semantic settings navigation icon paths.
 NAV_ICON_PATHS = {
     "general": (
         '<path d="M4 6h16M4 12h16M4 18h16"/>'
@@ -150,8 +142,173 @@ NAV_ICON_PATHS = {
 }
 
 
-def settings_stylesheet():
-    p = PALETTE
+# Shared non-color appearance settings for the shelf and its contents.
+# Theme JSON files supply all color values.
+SHELF = {
+    "height": 52,
+    "top_margin": 6,
+    "padding": (9, 0, 9, 0),
+    "margin": (0, 0, 0, 0),
+    "spacing": 5,
+    "chip_spacing": 10,
+    "border_width": 1,
+    "border_radius": 27,
+    "shadow_blur_radius": 10,
+    "shadow_offset": (0, 2),
+    "width_ratio": 0.7,
+    "width_ratio_min": 0.30,
+    "width_ratio_max": 0.98,
+}
+
+CHIP = {
+    "height": 32,
+    "minimum_width": 70,
+    "maximum_width": 350,
+    "minimum_width_limit": 70,
+    "maximum_width_limit": 500,
+    "padding": (10, 0, 10, 0),
+    "spacing": 8,
+    "border_radius": 15,
+    "border_width": 1,
+    "font_size": 15,
+    "font_weight": 600,
+    "icon_font_weight": 800,
+    "index_font_size": 11,
+    "index_font_weight": 700,
+    "icon_size": 18,
+    "icon_font_size": 11,
+    "open_icon_path": "assets/icons/open_link.svg",
+    "open_icon_size": 18,
+    "folder_icon_path": "assets/icons/folder.svg",
+    "file_icon_path": "assets/icons/file.svg",
+    "favicon_size": 22,
+    "folder_icon_size": 22,
+    "color_preview_size": 22,
+    "color_preview_border_width": 1,
+    "thumbnail": {
+        "width": 26,
+        "height": 22,
+        "border_radius": 4,
+        "shadow_blur_radius": 3,
+        "shadow_offset": (0, 1),
+    },
+}
+
+CONTEXT_MENU = {
+    "border_width": 1,
+    "border_radius": 50,
+    "padding": 6,
+    "item_size": 16,
+    "item_padding": 5,
+    "item_margin": 2,
+    "item_border_radius": 7,
+    "icon_size": 18,
+    "icon_stroke_width": 1.5,
+    "pin_icon": '<path d="M12 17v5"/><path d="M12 2v5"/><path d="M9 7h6l1 5 3 3v1H5v-1l3-3z"/>',
+    "unpin_icon": '<path d="M12 17v5"/><path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"/><path d="m2 2 20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>',
+    "copy_icon": '<rect x="8" y="7" width="11" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/>',
+    "delete_icon": '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    "clear_icon": '<path d="m16 22-1-4"/><path d="M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1"/><path d="M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"/><path d="m8 22 1-4"/>',
+}
+
+EMPTY_STATE = {
+    "text": "Nothing Here",
+    "font_size": 17,
+    "font_weight": 600,
+    "padding": (5, 12),
+    "left_padding": 15,
+    "icon_enabled": True,
+    "icon_path": "assets/icons/clear.svg",
+    "icon_size": 22,
+    "icon_spacing": 5,
+}
+
+PREVIEW = {
+    "minimum_height": 66,
+    "border_width": 1,
+    "border_radius": 12,
+    "padding": (10, 12),
+    "font_size": 13,
+}
+TEXT_PREVIEW = {
+    "font_family": "Inter",
+    "font_size": 13,
+    "padding": (12, 12, 12, 12),
+    "text_padding": 8,
+    "max_width_ratio": 0.85,
+    "max_height_ratio": 0.85,
+    "min_width": 420,
+    "min_height": 190,
+    "max_min_width": 360,
+    "max_min_height": 240,
+    "measurement_sample_length": 20000,
+    "measurement_max_columns": 100,
+    "measurement_min_columns": 40,
+    "measurement_max_lines": 100,
+    "horizontal_padding_allowance": 72,
+    "vertical_padding_allowance": 100,
+}
+SCROLL_VIEWPORT = {
+    "border_radius": 40,
+    "edge_fade": {
+        "enabled": True,
+        "width": 40,
+        "alpha_stops": ((0.0, 0.0), (0.35, 0.2), (0.7, 0.7), (1.0, 1.0)),
+    },
+}
+NOTIFICATION = {
+    "title_font_size": 14,
+    "title_font_weight": 600,
+    "message_font_size": 12,
+    "message_font_weight": 400,
+    "border_radius": 12,
+    "padding": (12, 16),
+    "width": 360,
+    "duration_ms": 4500,
+    "border_width": 1,
+    "card_spacing": 12,
+    "accent_bar_width": 4,
+    "text_spacing": 3,
+    "accent_radius": 2,
+    "screen_edge_margin": 20,
+}
+THEME_LAYOUT = {
+    "shelf": SHELF,
+    "chip": CHIP,
+    "context_menu": CONTEXT_MENU,
+    "empty": EMPTY_STATE,
+    "preview": PREVIEW,
+    "text_preview": TEXT_PREVIEW,
+    "scroll_viewport": SCROLL_VIEWPORT,
+    "notification": NOTIFICATION,
+}
+TRAY_MENU = {
+    "width": 120,
+    "icon_size": 22,
+    "icon_stroke_width": 2.2,
+    "radius": 10,
+    "border_width": 1,
+    "font_family": "Inter, 'Segoe UI', sans-serif",
+    "font_size": 15,
+    "font_weight": 600,
+    "padding": (2, 2),
+    "item_padding": (4, 4),
+    "item_content_left_padding": 6,
+    "item_margin": (3, 3),
+    "item_radius": 7,
+    "item_min_width": 64,
+    "separator_height": 1,
+    "separator_margins": (4, 8),
+}
+
+
+def component(section, key, default=None):
+    """Read a shared non-color UI value."""
+    return globals().get(section, {}).get(key, default)
+
+# Settings stylesheet builders. Colors are supplied by the active theme.
+def settings_stylesheet(palette):
+    p = palette
     f = FONT
     return f"""
         QDialog {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {f['dialog_size']}px; }}
@@ -159,7 +316,7 @@ def settings_stylesheet():
         QStackedWidget#settingsPages {{ background: {p['background']}; }}
         QScrollArea#settingsPageScroll {{ background: {p['background']}; border: none; }}
         QWidget#settingsPage {{ background: {p['background']}; }}
-        QFrame#settingsControlPanel {{ background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {SIDEBAR_PANEL_RADIUS}px; }}
+        QFrame#settingsControlPanel {{ background: {p['surface']}; border: {SETTINGS_PANEL_BORDER_WIDTH}px solid {p['border']}; border-radius: {SIDEBAR_PANEL_RADIUS}px; }}
         QListWidget#settingsSidebar, QListWidget#settingsSidebar::viewport {{ background: transparent; border: none; }}
         QListWidget#settingsSidebar {{ padding: {SIDEBAR_PADDING[0]}px {SIDEBAR_PADDING[1]}px; outline: none; }}
         QListWidget#settingsSidebar::item {{ background: transparent; border: none; padding: 0; margin: {NAV_ITEM_MARGINS[0]}px {NAV_ITEM_MARGINS[1]}px; }}
@@ -167,17 +324,17 @@ def settings_stylesheet():
         QLabel#settingsNavLabel {{ color: {p['text']}; font-weight: {f['sidebar_weight']}; }}
         QLabel#pageHeading {{ color: {p['text']}; font-size: {f['page_title_size']}px; font-weight: {f['page_title_weight']}; }}
         QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: {SUBTITLE_BOTTOM_PADDING}px; }}
-        QFrame#settingsCard {{ background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
+        QFrame#settingsCard {{ background: {p['surface']}; border: {SETTINGS_CARD_BORDER_WIDTH}px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
-        QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: 1px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
+        QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
         QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: {p['danger']}; }}
         QPushButton#clearHistoryButton:pressed {{ background: {p['surface_hover']}; }}
         QLabel#settingTitle {{ color: {p['text']}; font-size: {f['setting_title_size']}px; font-weight: {f['setting_title_weight']}; }}
         QLabel#settingDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
         QCheckBox#settingsSwitch {{ background: transparent; border: none; }}
-        QComboBox, QSpinBox, QDoubleSpinBox {{ color: {p['text']}; background: {p['control_background']}; border: 1px solid {p['control_border']}; border-radius: {CONTROL_RADIUS}px; padding: {CONTROL_PADDING[0]}px {CONTROL_PADDING[1]}px; min-height: {CONTROL_MIN_HEIGHT}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; }}
+        QComboBox, QSpinBox, QDoubleSpinBox {{ color: {p['text']}; background: {p['control_background']}; border: {CONTROL_BORDER_WIDTH}px solid {p['control_border']}; border-radius: {CONTROL_RADIUS}px; padding: {CONTROL_PADDING[0]}px {CONTROL_PADDING[1]}px; min-height: {CONTROL_MIN_HEIGHT}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; }}
         QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ color: {p['text']}; background: {p['control_hover_background']}; border-color: {p['control_hover_border']}; }}
-        QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {p['control_focus_border']}; }}
+        QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: {CONTROL_FOCUS_BORDER_WIDTH}px solid {p['control_focus_border']}; }}
         QComboBox#macCombo {{ padding: 0; border: none; background: transparent; min-height: {DROPDOWN_MIN_SIZE[1]}px; }}
         QLineEdit, QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ color: {p['text']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; font-weight: {f['control_weight']}; }}
         QScrollBar:vertical {{ background: transparent; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; }}
@@ -186,25 +343,25 @@ def settings_stylesheet():
     """
 
 
-def confirmation_stylesheet():
-    p = PALETTE
+def confirmation_stylesheet(palette):
+    p = palette
     return f"""
         QMessageBox {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
         QMessageBox QLabel {{ color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; }}
-        QMessageBox QPushButton {{ color: {p['text']}; background: {p['surface']}; border: 1px solid {p['border']}; border-radius: {CONFIRMATION_BUTTON_RADIUS}px; padding: {CONFIRMATION_BUTTON_PADDING[0]}px {CONFIRMATION_BUTTON_PADDING[1]}px; min-width: {CONFIRMATION_BUTTON_MIN_WIDTH}px; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; font-weight: {CONFIRMATION_BUTTON_WEIGHT}; }}
+        QMessageBox QPushButton {{ color: {p['text']}; background: {p['surface']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CONFIRMATION_BUTTON_RADIUS}px; padding: {CONFIRMATION_BUTTON_PADDING[0]}px {CONFIRMATION_BUTTON_PADDING[1]}px; min-width: {CONFIRMATION_BUTTON_MIN_WIDTH}px; font-family: {FONT_FAMILY}; font-size: {FONT['dialog_size']}px; font-weight: {CONFIRMATION_BUTTON_WEIGHT}; }}
         QMessageBox QPushButton:hover {{ background: {p['surface_hover']}; }}
         QMessageBox QPushButton:focus {{ border-color: {p['control_focus_border']}; outline: none; }}
         QMessageBox QPushButton#confirmClearButton {{ color: {p['danger']}; }}
     """
 
 
-def dropdown_stylesheet():
-    p = PALETTE
+def dropdown_stylesheet(palette):
+    p = palette
     return f"""
         QListView {{
             color: {p['text']};
             background: {p['control_background']};
-            border: 1px solid {p['control_border']};
+            border: {DROPDOWN_BORDER_WIDTH}px solid {p['control_border']};
             border-radius: {DROPDOWN_RADIUS}px;
             outline: none;
             padding: {DROPDOWN_LIST_PADDING}px;

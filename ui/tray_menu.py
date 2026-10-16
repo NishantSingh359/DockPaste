@@ -1,36 +1,32 @@
-"""Appearance for DockPaste's system-tray menu, independent of shelf themes."""
+"""System-tray menu behavior and styling."""
 
 from PySide6.QtCore import QByteArray, QEvent, QObject, QRectF, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QProxyStyle, QStyle
 
+from ui.theme_manager import ThemeManager
+from ui_config import TRAY_MENU
 
-PALETTE = {
-    "background": "#232323",
-    "border": "#333333",
-    "text": "#d2d2d2",
-    "accent": "#0A84FF",
-    "selected_text": "#d2d2d2",
-    "separator": "#333333",
-}
 
-MENU_WIDTH = 120
-MENU_ICON_SIZE = 22
-MENU_ICON_STROKE_WIDTH = 2.2
-MENU_RADIUS = 10
-MENU_BORDER_WIDTH = 1
-MENU_FONT_FAMILY = "Inter, 'Segoe UI', sans-serif"
-MENU_FONT_SIZE = 15
-MENU_FONT_WEIGHT = 600
-MENU_PADDING = (2, 2)
-ITEM_PADDING = (4, 4)
-ITEM_CONTENT_LEFT_PADDING = 6
-ITEM_MARGIN = (3, 3)
-ITEM_RADIUS = 7
-ITEM_MIN_WIDTH = 64
-SEPARATOR_HEIGHT = 1
-SEPARATOR_MARGINS = (4, 8)
+PALETTE = ThemeManager().get_theme("dark")["tray_menu"]
+
+MENU_WIDTH = TRAY_MENU["width"]
+MENU_ICON_SIZE = TRAY_MENU["icon_size"]
+MENU_ICON_STROKE_WIDTH = TRAY_MENU["icon_stroke_width"]
+MENU_RADIUS = TRAY_MENU["radius"]
+MENU_BORDER_WIDTH = TRAY_MENU["border_width"]
+MENU_FONT_FAMILY = TRAY_MENU["font_family"]
+MENU_FONT_SIZE = TRAY_MENU["font_size"]
+MENU_FONT_WEIGHT = TRAY_MENU["font_weight"]
+MENU_PADDING = TRAY_MENU["padding"]
+ITEM_PADDING = TRAY_MENU["item_padding"]
+ITEM_CONTENT_LEFT_PADDING = TRAY_MENU["item_content_left_padding"]
+ITEM_MARGIN = TRAY_MENU["item_margin"]
+ITEM_RADIUS = TRAY_MENU["item_radius"]
+ITEM_MIN_WIDTH = TRAY_MENU["item_min_width"]
+SEPARATOR_HEIGHT = TRAY_MENU["separator_height"]
+SEPARATOR_MARGINS = TRAY_MENU["separator_margins"]
 
 _ICON_PATHS = {
     "settings": (
@@ -93,8 +89,8 @@ class _MenuIconStateResetter(QObject):
         return False
 
 
-def menu_stylesheet():
-    p = PALETTE
+def menu_stylesheet(palette=None):
+    p = palette or PALETTE
     return f"""
         QMenu {{
             color: {p['text']};
@@ -126,19 +122,20 @@ def menu_stylesheet():
     """
 
 
-def style_menu(menu, actions):
+def style_menu(menu, actions, palette=None):
     """Apply the shared appearance and blue/white hover icon states."""
+    p = palette or PALETTE
     menu_style = TrayMenuStyle("Fusion")
     menu_style.setParent(menu)
     menu.setStyle(menu_style)
     menu._tray_menu_style = menu_style
-    menu.setStyleSheet(menu_stylesheet())
+    menu.setStyleSheet(menu_stylesheet(p))
     menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     menu.setFixedWidth(MENU_WIDTH)
     icons = {
         action: (
-            create_icon(name),
-            create_icon(name, PALETTE["selected_text"]),
+            create_icon(name, p["accent"]),
+            create_icon(name, p["selected_text"]),
         )
         for action, name in actions.items()
     }

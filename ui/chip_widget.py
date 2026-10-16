@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.theme_manager import get_theme_value
+import ui_config
 from config import (
     CHIP_MAX_WIDTH,
     CHIP_MIN_WIDTH,
@@ -234,7 +235,7 @@ class ChipWidget(QWidget):
             QLabel {{
                 color: {chip_theme.get("icon_color", "rgba(200, 200, 200, 1)")};
                 font-size: {chip_theme.get("icon_font_size", 11)}px;
-                font-weight: 800;
+                font-weight: {chip_theme.get("icon_font_weight", ui_config.CHIP["icon_font_weight"])};
             }}
         """)
         thumbnail = chip_theme.get("thumbnail", {})
@@ -323,7 +324,7 @@ class ChipWidget(QWidget):
             QLabel {{
                 color: {chip_theme.get("icon_color", "rgba(200, 200, 200, 1)")};
                 font-size: {chip_theme.get("icon_font_size", 11)}px;
-                font-weight: 800;
+                font-weight: {chip_theme.get("icon_font_weight", ui_config.CHIP["icon_font_weight"])};
             }}
         """)
         self.apply_style()

@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QPlainTextEdit, QVBoxLayout
 
 from config import APP_NAME
 from utils.app_icon import create_app_icon
+import ui_config
 
 
 class TextPreviewDialog(QDialog):
@@ -27,17 +28,33 @@ class TextPreviewDialog(QDialog):
         self.set_theme(theme)
 
         available_geometry = available_geometry or self._primary_available_geometry()
-        max_width = max(360, int(available_geometry.width() * 0.85))
-        max_height = max(240, int(available_geometry.height() * 0.85))
+        layout_config = ui_config.TEXT_PREVIEW
+        max_width = max(
+            layout_config["max_min_width"],
+            int(available_geometry.width() * layout_config["max_width_ratio"]),
+        )
+        max_height = max(
+            layout_config["max_min_height"],
+            int(available_geometry.height() * layout_config["max_height_ratio"]),
+        )
         metrics = QFontMetrics(self.preview.font())
-        sample = text[:20000]
+        sample = text[: layout_config["measurement_sample_length"]]
         longest_sample_line = max((len(line) for line in sample.splitlines()), default=0)
-        columns = max(40, min(longest_sample_line, 100))
+        columns = max(
+            layout_config["measurement_min_columns"],
+            min(longest_sample_line, layout_config["measurement_max_columns"]),
+        )
         line_count = max(1, text.count("\n") + 1)
-        desired_width = metrics.horizontalAdvance("M" * columns) + 72
-        desired_height = (min(line_count, 100) * metrics.lineSpacing()) + 100
-        width = min(max_width, max(420, desired_width))
-        height = min(max_height, max(190, desired_height))
+        desired_width = (
+            metrics.horizontalAdvance("M" * columns)
+            + layout_config["horizontal_padding_allowance"]
+        )
+        desired_height = (
+            min(line_count, layout_config["measurement_max_lines"])
+            * metrics.lineSpacing()
+        ) + layout_config["vertical_padding_allowance"]
+        width = min(max_width, max(layout_config["min_width"], desired_width))
+        height = min(max_height, max(layout_config["min_height"], desired_height))
         self.resize(width, height)
         self.move(
             available_geometry.center().x() - width // 2,

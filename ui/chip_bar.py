@@ -90,7 +90,7 @@ class ChipBar(QScrollArea):
         self._edge_fade_width = width
 
         raw_stops = settings.get("alpha_stops", DEFAULT_EDGE_FADE["alpha_stops"])
-        if not isinstance(raw_stops, list) or len(raw_stops) < 2:
+        if not isinstance(raw_stops, (list, tuple)) or len(raw_stops) < 2:
             raise ValueError(
                 "scroll_viewport.edge_fade.alpha_stops must contain at least "
                 "two [position, alpha] pairs"
@@ -98,7 +98,7 @@ class ChipBar(QScrollArea):
 
         stops = []
         for stop in raw_stops:
-            if not isinstance(stop, list) or len(stop) != 2:
+            if not isinstance(stop, (list, tuple)) or len(stop) != 2:
                 raise ValueError("Each edge-fade alpha stop must be a [position, alpha] pair")
             position, alpha = stop
             if (

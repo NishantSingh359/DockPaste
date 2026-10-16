@@ -51,7 +51,8 @@ from core.paste_controller import PasteController
 from ui.chip_bar import ChipBar
 from ui.chip_widget import ChipContextMenu, ChipWidget
 from ui.settings_dialog import SettingsDialog
-import tray_menu_config
+from ui import tray_menu as tray_menu_ui
+import ui_config
 from ui.notification_popup import OversizedItemPopup
 from ui.text_preview_dialog import TextPreviewDialog
 from ui.animations import EdgeFadeOpacityEffect, fade, parse_color
@@ -372,7 +373,7 @@ class MainWindow(QWidget):
         scroll_widget.setStyleSheet("background: transparent;")
         self.chip_layout = QHBoxLayout(scroll_widget)
         self.chip_layout.setContentsMargins(0, 0, 0, 0)
-        self.chip_layout.setSpacing(10)
+        self.chip_layout.setSpacing(ui_config.SHELF["chip_spacing"])
 
         self.scroll.setWidget(scroll_widget)
         container_layout.addWidget(self.scroll)
@@ -1061,6 +1062,12 @@ class MainWindow(QWidget):
                 self._text_preview_dialog.set_theme(self.theme)
             except RuntimeError:
                 self._text_preview_dialog = None
+        if hasattr(self, "tray_icon") and hasattr(self, "_tray_menu_actions"):
+            tray_menu_ui.style_menu(
+                self.tray_icon.contextMenu(),
+                self._tray_menu_actions,
+                self.theme.get("tray_menu", {}),
+            )
 
     def _apply_empty_theme(self):
         empty_theme = self.theme.get("empty", {})
@@ -1224,9 +1231,14 @@ class MainWindow(QWidget):
         tray_menu.addSeparator()
         exit_action = tray_menu.addAction("Exit")
         exit_action.triggered.connect(self.exit_application)
-        tray_menu_config.style_menu(
+        self._tray_menu_actions = {
+            settings_action: "settings",
+            exit_action: "exit",
+        }
+        tray_menu_ui.style_menu(
             tray_menu,
-            {settings_action: "settings", exit_action: "exit"},
+            self._tray_menu_actions,
+            self.theme.get("tray_menu", {}),
         )
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()

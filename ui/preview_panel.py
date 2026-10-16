@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel
+import ui_config
 
 
 class PreviewPanel(QLabel):
@@ -10,7 +11,7 @@ class PreviewPanel(QLabel):
         self.setText("Hover a chip to preview it")
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.setWordWrap(True)
-        self.setMinimumHeight(66)
+        self.setMinimumHeight(ui_config.PREVIEW["minimum_height"])
         self.apply_theme()
 
     def apply_theme(self):
@@ -20,7 +21,7 @@ class PreviewPanel(QLabel):
             QLabel {{
                 background-color: {preview.get("background", "rgba(255, 255, 255, 0.08)")};
                 color: {preview.get("text", "rgba(200, 200, 200, 1)")};
-                border: 1px solid {preview.get("border", "rgba(255, 255, 255, 0.12)")};
+                border: {preview.get("border_width", ui_config.PREVIEW["border_width"])}px solid {preview.get("border", "rgba(255, 255, 255, 0.12)")};
                 border-radius: {preview.get("border_radius", 12)}px;
                 padding: {padding[0]}px {padding[1]}px;
                 font-size: {preview.get("font_size", 13)}px;

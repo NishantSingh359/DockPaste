@@ -33,26 +33,30 @@ from config import (
     SHELF_WIDTH_RATIO_MIN,
 )
 from animation_config import CHIP_SCROLL_SPEED_MIN, CHIP_SCROLL_SPEED_MAX
-import settings_config as appearance
+import ui_config as appearance
 
 
 class SettingsNavRow(QWidget):
     clicked = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, palette, parent=None):
         super().__init__(parent)
         self._active = False
         self._hovered = False
-        self._accent = QColor(appearance.PALETTE["accent"])
-        self._hover_color = QColor(appearance.PALETTE["surface_hover"])
+        self._accent = QColor(palette["accent"])
+        self._hover_color = QColor(palette["surface_hover"])
+        self._text_color = QColor(palette["text"])
 
     def set_active(self, active):
         self._active = bool(active)
         self.update()
 
-    def set_colors(self, accent, hover_color):
+    def set_colors(self, accent, hover_color, text_color=None):
         self._accent = accent
         self._hover_color = hover_color
+        if text_color is not None:
+            self._text_color = text_color
+        self.setStyleSheet(f"QLabel#settingsNavLabel {{ color: {self._text_color.name()}; }}")
         self.update()
 
     def mousePressEvent(self, event):
@@ -87,11 +91,18 @@ class SettingsNavRow(QWidget):
 class SettingsNavIcon(QWidget):
     """Consistent-size semantic line icon for a Settings section."""
 
-    def __init__(self, icon_name, parent=None):
+    def __init__(self, icon_name, palette, parent=None):
         super().__init__(parent)
         self.icon_name = icon_name
         self._active = False
+        self._accent = QColor(palette["accent"])
+        self._selected_color = QColor(palette["white"])
         self.setFixedSize(appearance.NAV_ICON_SIZE, appearance.NAV_ICON_SIZE)
+
+    def set_colors(self, accent, selected_color):
+        self._accent = accent
+        self._selected_color = selected_color
+        self.update()
 
     def set_active(self, active):
         if self._active != bool(active):
@@ -99,7 +110,7 @@ class SettingsNavIcon(QWidget):
             self.update()
 
     def paintEvent(self, event):
-        color = appearance.PALETTE["white"] if self._active else appearance.PALETTE["accent"]
+        color = self._selected_color.name() if self._active else self._accent.name()
         svg = (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{appearance.NAV_ICON_VIEWBOX_SIZE}" height="{appearance.NAV_ICON_VIEWBOX_SIZE}" '
             f'viewBox="0 0 {appearance.NAV_ICON_VIEWBOX_SIZE} {appearance.NAV_ICON_VIEWBOX_SIZE}" fill="none" stroke="{color}" '
@@ -162,6 +173,7 @@ class SettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        self._theme_palette = dict(theme["settings"])
         QFontDatabase.addApplicationFont(str(appearance.FONT_FILE))
         self.resize(*appearance.WINDOW_SIZE)
 
@@ -244,7 +256,7 @@ class SettingsDialog(QDialog):
 
         appearance_page = self._new_page("Appearance", "Adjust the shelf and the way clips are shown.")
         appearance_card = self._card(appearance_page)
-        self.theme_combo = MacComboBox()
+        self.theme_combo = MacComboBox(self._theme_palette)
         for theme_id, display_name in available_themes:
             self.theme_combo.addItem(display_name, theme_id)
         self.theme_combo.setCurrentIndex(self.theme_combo.findData(theme_name))
@@ -294,7 +306,7 @@ class SettingsDialog(QDialog):
 
         history = self._new_page("History", "Manage saved clipboard history.")
         history_card = self._card(history)
-        self.history_date_combo = MacComboBox()
+        self.history_date_combo = MacComboBox(self._theme_palette)
         for history_date in history_dates:
             self.history_date_combo.addItem(history_date, history_date)
         selected_index = self.history_date_combo.findData(selected_history_date)
@@ -369,13 +381,13 @@ class SettingsDialog(QDialog):
         item.setSizeHint(QSize(*appearance.NAV_ITEM_SIZE))
         self.sidebar.addItem(item)
 
-        row = SettingsNavRow()
+        row = SettingsNavRow(self._theme_palette)
         row.setObjectName("settingsNavRow")
         row.setCursor(Qt.CursorShape.PointingHandCursor)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(*appearance.NAV_ROW_MARGINS)
         row_layout.setSpacing(appearance.NAV_ROW_SPACING)
-        icon = SettingsNavIcon(icon_name)
+        icon = SettingsNavIcon(icon_name, self._theme_palette)
         icon.setObjectName("settingsNavIcon")
         icon.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         label = QLabel(title)
@@ -421,9 +433,8 @@ class SettingsDialog(QDialog):
         page.layout().addWidget(card)
         return card
 
-    @staticmethod
-    def _switch(title, description, checked, callback):
-        checkbox = MacSwitch()
+    def _switch(self, title, description, checked, callback):
+        checkbox = MacSwitch(self._theme_palette)
         checkbox.setObjectName("settingsSwitch")
         checkbox.setChecked(bool(checked))
         checkbox.setAccessibleName(title)
@@ -491,10 +502,13 @@ class SettingsDialog(QDialog):
         return spin
 
     def set_theme(self, theme):
-        # Settings keep their own appearance, independent of the shelf theme.
-        p = appearance.PALETTE
+        # Settings share the active theme's colors while keeping their own layout.
+        p = {**self._theme_palette, **(theme or {}).get("settings", {})}
+        self._theme_palette = p
         for row in self.findChildren(SettingsNavRow):
-            row.set_colors(QColor(p["accent"]), QColor(p["surface_hover"]))
+            row.set_colors(QColor(p["accent"]), QColor(p["surface_hover"]), QColor(p["text"]))
+        for icon in self.findChildren(SettingsNavIcon):
+            icon.set_colors(QColor(p["accent"]), QColor(p["white"]))
         for switch in self.findChildren(MacSwitch):
             switch.set_colors(
                 QColor(p["accent"]),
@@ -503,8 +517,11 @@ class SettingsDialog(QDialog):
                 QColor(p["white"]),
                 QColor(p["switch_disabled"]),
             )
+            switch._disabled_thumb_color = QColor(p["disabled_thumb"])
+        for combo in self.findChildren(MacComboBox):
+            combo.set_theme_colors(p)
         self.setWindowTitle(appearance.WINDOW_TITLE)
-        self.setStyleSheet(appearance.settings_stylesheet())
+        self.setStyleSheet(appearance.settings_stylesheet(p))
 
     def _set_oversize_warning_availability(self, prevention_enabled):
         self.oversize_warning.setEnabled(bool(prevention_enabled))
@@ -522,7 +539,7 @@ class SettingsDialog(QDialog):
         clear_button.setObjectName("confirmClearButton")
         dialog.setDefaultButton(cancel_button)
         dialog.setEscapeButton(cancel_button)
-        dialog.setStyleSheet(appearance.confirmation_stylesheet())
+        dialog.setStyleSheet(appearance.confirmation_stylesheet(self._theme_palette))
         dialog.exec()
         if dialog.clickedButton() is clear_button:
             callback()
@@ -531,14 +548,15 @@ class SettingsDialog(QDialog):
 class MacSwitch(QCheckBox):
     """Compact track-and-thumb switch drawn in the macOS settings style."""
 
-    def __init__(self, parent=None):
+    def __init__(self, palette, parent=None):
         super().__init__(parent)
+        self._on_color = QColor(palette["accent"])
+        self._off_color = QColor(palette["switch_off"])
+        self._border_color = QColor(palette["border"])
+        self._thumb_color = QColor(palette["white"])
+        self._disabled_color = QColor(palette["switch_disabled"])
+        self._disabled_thumb_color = QColor(palette["disabled_thumb"])
         self.setFixedSize(*appearance.SWITCH_SIZE)
-        self._on_color = QColor(appearance.PALETTE["accent"])
-        self._off_color = QColor(appearance.PALETTE["switch_off"])
-        self._border_color = QColor(appearance.PALETTE["border"])
-        self._thumb_color = QColor(appearance.PALETTE["white"])
-        self._disabled_color = QColor(appearance.PALETTE["switch_disabled"])
         self._hovered = False
         self._thumb_position = float(appearance.SWITCH_THUMB_X["off"])
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -606,7 +624,7 @@ class MacSwitch(QCheckBox):
         else:
             track_color = self._disabled_color
             border_color = self._disabled_color
-            thumb_color = QColor(appearance.PALETTE["disabled_thumb"])
+            thumb_color = self._disabled_thumb_color
         painter.setPen(QPen(border_color, appearance.SWITCH_BORDER_WIDTH))
         painter.setBrush(track_color)
         painter.drawRoundedRect(track, appearance.SWITCH_TRACK_RADIUS, appearance.SWITCH_TRACK_RADIUS)
@@ -621,8 +639,9 @@ class MacSwitch(QCheckBox):
 class MacComboBox(QComboBox):
     """Draw a restrained macOS-style popup button and keep Qt's native popup."""
 
-    def __init__(self, parent=None):
+    def __init__(self, palette, parent=None):
         super().__init__(parent)
+        self._theme_palette = dict(palette)
         self.setObjectName("macCombo")
         self.setFont(
             QFont(
@@ -646,17 +665,23 @@ class MacComboBox(QComboBox):
         self.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.view().setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view().setMaximumHeight(appearance.DROPDOWN_MAX_HEIGHT)
-        self.view().setStyleSheet(appearance.dropdown_stylesheet())
+        self.view().setStyleSheet(appearance.dropdown_stylesheet(self._theme_palette))
         self._hovered = False
 
+    def set_theme_colors(self, palette):
+        self._theme_palette = {**self._theme_palette, **palette}
+        self.view().setStyleSheet(appearance.dropdown_stylesheet(self._theme_palette))
+        self.update()
+
     def paintEvent(self, event):
-        text_color = QColor(appearance.PALETTE["text"])
-        muted = QColor(appearance.PALETTE["control_border"])
-        focus_border = QColor(appearance.PALETTE["control_focus_border"])
+        p = self._theme_palette
+        text_color = QColor(p["text"])
+        muted = QColor(p["control_border"])
+        focus_border = QColor(p["control_focus_border"])
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect().adjusted(*appearance.DROPDOWN_BORDER_INSET)
-        border = focus_border if self.hasFocus() else QColor(appearance.PALETTE["control_hover_border"]) if self._hovered else muted
+        border = focus_border if self.hasFocus() else QColor(p["control_hover_border"]) if self._hovered else muted
         painter.setPen(QPen(border, appearance.DROPDOWN_BORDER_WIDTH))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(rect, appearance.DROPDOWN_RADIUS, appearance.DROPDOWN_RADIUS)

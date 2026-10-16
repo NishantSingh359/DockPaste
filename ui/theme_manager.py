@@ -1,8 +1,10 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from config import BASE_DIR
+from ui_config import THEME_LAYOUT
 
 
 THEME_DIR = BASE_DIR / "themes"
@@ -11,7 +13,7 @@ LEGACY_THEME_NAMES = {"one_dark_pro_night_flat": "dark_pro"}
 
 
 class ThemeManager:
-    """Loads built-in theme definitions and exposes their selected values."""
+    """Loads color-only themes and combines them with shared UI layout config."""
 
     def __init__(self, theme_dir=THEME_DIR):
         self.theme_dir = Path(theme_dir)
@@ -44,8 +46,17 @@ class ThemeManager:
         theme_name = LEGACY_THEME_NAMES.get(theme_name, theme_name)
         if theme_name not in self._themes:
             theme_name = DEFAULT_THEME
-        theme = self._themes.get(theme_name, self._themes[DEFAULT_THEME])
+        theme = deepcopy(THEME_LAYOUT)
+        self._merge_values(theme, self._themes.get(theme_name, self._themes[DEFAULT_THEME]))
         return {**theme, "name": theme_name}
+
+    @staticmethod
+    def _merge_values(target, values):
+        for key, value in values.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                ThemeManager._merge_values(target[key], value)
+            else:
+                target[key] = value
 
     def is_valid(self, name):
         return str(name or "").lower() in self._themes

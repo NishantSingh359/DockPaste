@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from ui_config import CHIP as UI_CHIP, SHELF as UI_SHELF
 
 
 # -----------------------------------------------------------------------------
@@ -47,10 +48,10 @@ clip_indexing = True
 # Chip behavior
 # -----------------------------------------------------------------------------
 
-CHIP_MIN_WIDTH = 70
-CHIP_MAX_WIDTH = 350
-CHIP_WIDTH_MIN_LIMIT = 70
-CHIP_WIDTH_MAX_LIMIT = 500
+CHIP_MIN_WIDTH = UI_CHIP["minimum_width"]
+CHIP_MAX_WIDTH = UI_CHIP["maximum_width"]
+CHIP_WIDTH_MIN_LIMIT = UI_CHIP["minimum_width_limit"]
+CHIP_WIDTH_MAX_LIMIT = UI_CHIP["maximum_width_limit"]
 MAX_CHIPS = 100
 MAX_CHIPS_MIN = 50
 MAX_CHIPS_MAX = 500
@@ -62,7 +63,7 @@ CHIP_WIDTH_DEFAULTS_VERSION = 2
 # Shelf behavior
 # -----------------------------------------------------------------------------
 
-SHELF_WIDTH_RATIO = 0.7
-SHELF_WIDTH_RATIO_MIN = 0.30
-SHELF_WIDTH_RATIO_MAX = 0.98
+SHELF_WIDTH_RATIO = UI_SHELF["width_ratio"]
+SHELF_WIDTH_RATIO_MIN = UI_SHELF["width_ratio_min"]
+SHELF_WIDTH_RATIO_MAX = UI_SHELF["width_ratio_max"]
 SETTINGS_WINDOW_MIN_WIDTH = 320
