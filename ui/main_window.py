@@ -29,6 +29,8 @@ from PySide6.QtGui import (
     QRegion,
     QIcon,
     QPixmap,
+    QBrush,
+    QConicalGradient,
 )
 from PySide6.QtSvg import QSvgRenderer
 import ctypes
@@ -54,7 +56,6 @@ from ui.notification_popup import OversizedItemPopup
 from ui.text_preview_dialog import TextPreviewDialog
 from ui.animations import EdgeFadeOpacityEffect, fade, parse_color
 from ui.theme_manager import ThemeManager, get_theme_value, set_active_theme
-import settings_config as settings_appearance
 from animation_config import (
     CHIP_CONTEXT_MENU_FADE_OUT_MS,
     CHIP_LAYOUT_ANIMATION_MS,
@@ -67,6 +68,12 @@ from animation_config import (
     CHIP_SCROLL_SPEED,
     CHIP_SCROLL_SPEED_MIN,
     CHIP_SCROLL_SPEED_MAX,
+    DROP_BORDER_ANIMATION_ENABLED,
+    DROP_BORDER_COLOR_START,
+    DROP_BORDER_COLOR_END,
+    DROP_BORDER_ANIMATION_MS,
+    DROP_BORDER_ANIMATION_INTERVAL_MS,
+    DROP_BORDER_WIDTH,
 )
 from config import (
     APP_NAME,
@@ -107,6 +114,12 @@ class ShelfContainer(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.theme = theme
         self.drop_target_active = False
+        self._drop_border_angle = 0.0
+        self._drop_border_timer = QTimer(self)
+        self._drop_border_timer.setInterval(
+            max(16, int(DROP_BORDER_ANIMATION_INTERVAL_MS))
+        )
+        self._drop_border_timer.timeout.connect(self._advance_drop_border_gradient)
         self._set_theme_values()
 
     def _set_theme_values(self):
@@ -141,6 +154,19 @@ class ShelfContainer(QWidget):
         if self.drop_target_active == active:
             return
         self.drop_target_active = active
+        if active and MOTION_ENABLED and DROP_BORDER_ANIMATION_ENABLED:
+            self._drop_border_angle = 0.0
+            self._drop_border_timer.start()
+        else:
+            self._drop_border_timer.stop()
+        self.update()
+
+    def _advance_drop_border_gradient(self):
+        duration = max(1, int(DROP_BORDER_ANIMATION_MS))
+        interval = max(16, int(DROP_BORDER_ANIMATION_INTERVAL_MS))
+        self._drop_border_angle = (
+            self._drop_border_angle + 360.0 * interval / duration
+        ) % 360.0
         self.update()
     
     def paintEvent(self, event):
@@ -149,7 +175,11 @@ class ShelfContainer(QWidget):
         
         path = QPainterPath()
         rect = self.rect()
-        border_width = max(self.border_width, 2.0) if self.drop_target_active else self.border_width
+        border_width = (
+            max(self.border_width, float(DROP_BORDER_WIDTH))
+            if self.drop_target_active
+            else self.border_width
+        )
         if border_width > 0:
             margin = border_width / 2.0
             rect_f = rect.toRectF().adjusted(margin, margin, -margin, -margin)
@@ -162,14 +192,21 @@ class ShelfContainer(QWidget):
         painter.fillPath(path, bg_color)
         
         if border_width > 0:
-            border_color = parse_color(
-                settings_appearance.PALETTE["accent"]
-                if self.drop_target_active
-                else self.border_color
-            )
             pen = painter.pen()
-            pen.setColor(border_color)
             pen.setWidthF(border_width)
+            if self.drop_target_active:
+                if MOTION_ENABLED and DROP_BORDER_ANIMATION_ENABLED:
+                    gradient = QConicalGradient(
+                        rect_f.center(), self._drop_border_angle
+                    )
+                    gradient.setColorAt(0.0, parse_color(DROP_BORDER_COLOR_START))
+                    gradient.setColorAt(0.5, parse_color(DROP_BORDER_COLOR_END))
+                    gradient.setColorAt(1.0, parse_color(DROP_BORDER_COLOR_START))
+                    pen.setBrush(QBrush(gradient))
+                else:
+                    pen.setColor(parse_color(DROP_BORDER_COLOR_START))
+            else:
+                pen.setColor(parse_color(self.border_color))
             painter.setPen(pen)
             painter.drawPath(path)
         
@@ -1416,10 +1453,11 @@ class MainWindow(QWidget):
         else:
             is_dragging = bool(QApplication.mouseButtons() & Qt.LeftButton)
 
+        cursor = QCursor.pos()
+
         if self.is_shelf_pinned or self._is_hiding:
             return
 
-        cursor = QCursor.pos()
         if self._cursor_over_chip_context_menu(cursor):
             if self.auto_hide_timer.isActive():
                 self.auto_hide_timer.stop()

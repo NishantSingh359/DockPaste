@@ -41,3 +41,15 @@ CHIP_SCROLL_DURATION_MS = 500
 CHIP_OVERSCROLL_LIMIT = 100
 CHIP_OVERSCROLL_DRAG_MS = 150
 CHIP_OVERSCROLL_BOUNCE_MS = 150
+
+
+# -----------------------------------------------------------------------------
+# Shelf drag-and-drop border
+# -----------------------------------------------------------------------------
+
+DROP_BORDER_ANIMATION_ENABLED = True
+DROP_BORDER_COLOR_START = "#007AFF"
+DROP_BORDER_COLOR_END = "#5EACFFFF"
+DROP_BORDER_ANIMATION_MS = 2000
+DROP_BORDER_ANIMATION_INTERVAL_MS = 30
+DROP_BORDER_WIDTH = 1
