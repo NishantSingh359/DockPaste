@@ -51,6 +51,22 @@ class ThemeManager:
         return {**theme, "name": theme_name}
 
     @staticmethod
+    def with_accent_color(theme, color):
+        """Return a themed palette with the selected accent applied consistently."""
+        themed = deepcopy(theme)
+        for section, key in (
+            ("settings", "accent"),
+            ("chip", "folder_icon_color"),
+            ("context_menu", "destructive_icon_color"),
+            ("text_preview", "selection"),
+            ("notification", "accent"),
+            ("tray_menu", "accent"),
+        ):
+            if key in themed.get(section, {}):
+                themed[section][key] = color
+        return themed
+
+    @staticmethod
     def _merge_values(target, values):
         for key, value in values.items():
             if isinstance(value, dict) and isinstance(target.get(key), dict):

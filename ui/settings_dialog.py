@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QAbstractItemView,
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -123,6 +124,89 @@ class SettingsNavIcon(QWidget):
         renderer.render(painter, self.rect())
 
 
+class ThemeOptionButton(QPushButton):
+    """Theme preview swatch with a clear selected outline and label."""
+
+    def __init__(self, theme_id, title, preview_color, palette, parent=None):
+        super().__init__(parent)
+        self.theme_id = theme_id
+        self._preview_color = QColor(preview_color)
+        self._text_color = QColor(palette["text"])
+        self._border_color = QColor(palette["border"])
+        self._accent_color = QColor(palette["accent"])
+        self._title = title
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(f"{title} theme")
+        self.setToolTip(f"Use the {title} theme")
+        self.setFixedSize(*appearance.THEME_PICKER["option_size"])
+        self.setStyleSheet("QPushButton { background: transparent; border: none; }")
+
+    def set_palette(self, palette, preview_color=None):
+        self._text_color = QColor(palette["text"])
+        self._border_color = QColor(palette["border"])
+        self._accent_color = QColor(palette["accent"])
+        if preview_color is not None:
+            self._preview_color = QColor(preview_color)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cfg = appearance.THEME_PICKER
+        inset = cfg["swatch_inset"]
+        swatch = self.rect().adjusted(inset, 4, -inset, -(self.height() - cfg["swatch_height"] - 4))
+        painter.setPen(QPen(self._accent_color if self.isChecked() else self._border_color,
+                            appearance.CONTROL_FOCUS_BORDER_WIDTH if self.isChecked() else appearance.CONTROL_BORDER_WIDTH))
+        painter.setBrush(self._preview_color)
+        painter.drawRoundedRect(swatch, cfg["swatch_radius"], cfg["swatch_radius"])
+        painter.setPen(self._text_color)
+        font = painter.font()
+        font.setFamily(appearance.FONT_FAMILY)
+        font.setPointSize(appearance.FONT["sidebar_size"])
+        font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Medium)
+        painter.setFont(font)
+        label_rect = self.rect().adjusted(0, cfg["swatch_height"] + cfg["label_gap"], 0, 0)
+        painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._title)
+
+
+class AccentColorButton(QPushButton):
+    """Circular accessible accent-color choice."""
+
+    def __init__(self, color, palette, parent=None):
+        super().__init__(parent)
+        self.accent_color = color
+        self._selection_color = QColor(palette["text"])
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(f"Accent color {color}")
+        self.setToolTip(f"Accent color {color}")
+        size = appearance.ACCENT_PICKER["swatch_size"]
+        self.setFixedSize(size, size)
+        self.setStyleSheet("QPushButton { background: transparent; border: none; }")
+
+    def set_palette(self, palette):
+        self._selection_color = QColor(palette["text"])
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(2, 2, -2, -2)
+        if self.isChecked():
+            painter.setPen(QPen(self._selection_color, appearance.ACCENT_PICKER["border_width"]))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            ring = rect.adjusted(1, 1, -1, -1)
+            painter.drawEllipse(ring)
+            rect = rect.adjusted(appearance.ACCENT_PICKER["ring_inset"],
+                                appearance.ACCENT_PICKER["ring_inset"],
+                                -appearance.ACCENT_PICKER["ring_inset"],
+                                -appearance.ACCENT_PICKER["ring_inset"])
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(self.accent_color))
+        painter.drawEllipse(rect)
+
+
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -145,6 +229,9 @@ class SettingsDialog(QDialog):
         shelf_width_ratio,
         theme_name,
         available_themes,
+        theme_previews,
+        accent_color,
+        accent_options,
         history_dates,
         selected_history_date,
         history_retention_days,
@@ -169,11 +256,14 @@ class SettingsDialog(QDialog):
         on_history_retention_days,
         on_clear_all_history,
         on_theme,
+        on_accent_color,
         parent=None,
     ):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
         self._theme_palette = dict(theme["settings"])
+        self._accent_color = accent_color
+        self._theme_previews = dict(theme_previews)
         QFontDatabase.addApplicationFont(str(appearance.FONT_FILE))
         self.resize(*appearance.WINDOW_SIZE)
 
@@ -255,15 +345,71 @@ class SettingsDialog(QDialog):
         self._add_page(general)
 
         appearance_page = self._new_page("Appearance", "Adjust the shelf and the way clips are shown.")
-        appearance_card = self._card(appearance_page)
-        self.theme_combo = MacComboBox(self._theme_palette)
-        for theme_id, display_name in available_themes:
-            self.theme_combo.addItem(display_name, theme_id)
-        self.theme_combo.setCurrentIndex(self.theme_combo.findData(theme_name))
-        self.theme_combo.currentIndexChanged.connect(
-            lambda index: on_theme(self.theme_combo.itemData(index))
+        theme_card = self._card(appearance_page)
+        theme_card_layout = theme_card.layout()
+        theme_card_layout.setContentsMargins(*appearance.THEME_PICKER["card_margins"])
+        theme_card_layout.setSpacing(appearance.THEME_PICKER["section_gap"])
+        themes_heading = QLabel("Themes")
+        themes_heading.setObjectName("appearanceSectionTitle")
+        theme_card_layout.addWidget(themes_heading)
+        themes_row = QHBoxLayout()
+        themes_row.setSpacing(appearance.THEME_PICKER["row_spacing"])
+        themes_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._theme_buttons = {}
+        self._theme_button_group = QButtonGroup(self)
+        self._theme_button_group.setExclusive(True)
+        self._theme_ids_by_index = {}
+        for index, (theme_id, display_name) in enumerate(available_themes):
+            option = ThemeOptionButton(
+                theme_id,
+                display_name,
+                theme_previews.get(theme_id, self._theme_palette["background"]),
+                self._theme_palette,
+            )
+            self._theme_buttons[theme_id] = option
+            self._theme_ids_by_index[index] = theme_id
+            self._theme_button_group.addButton(option, index)
+            themes_row.addWidget(option)
+        current_theme_index = next(
+            (index for index, theme_id in self._theme_ids_by_index.items() if theme_id == theme_name),
+            0,
         )
-        self._add_control_row(appearance_card, "Color Theme", "Choose the color palette used by DockPaste.", self.theme_combo)
+        if self._theme_button_group.button(current_theme_index):
+            self._theme_button_group.button(current_theme_index).setChecked(True)
+        self._theme_button_group.idClicked.connect(
+            lambda index: on_theme(self._theme_ids_by_index[index])
+        )
+        theme_card_layout.addLayout(themes_row)
+        theme_card_layout.addSpacing(appearance.ACCENT_PICKER["section_gap"])
+        accent_heading = QLabel("Accent Color")
+        accent_heading.setObjectName("appearanceSectionTitle")
+        theme_card_layout.addWidget(accent_heading)
+        accents_row = QHBoxLayout()
+        accents_row.setSpacing(appearance.ACCENT_PICKER["row_spacing"])
+        accents_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._accent_buttons = {}
+        self._accent_button_group = QButtonGroup(self)
+        self._accent_button_group.setExclusive(True)
+        self._accent_colors_by_index = {}
+        for index, color in enumerate(accent_options):
+            option = AccentColorButton(color, self._theme_palette)
+            self._accent_buttons[color.lower()] = option
+            self._accent_colors_by_index[index] = color
+            self._accent_button_group.addButton(option, index)
+            accents_row.addWidget(option)
+        selected_accent_index = next(
+            (index for index, color in self._accent_colors_by_index.items()
+             if color.lower() == self._accent_color.lower()),
+            0,
+        )
+        if self._accent_button_group.button(selected_accent_index):
+            self._accent_button_group.button(selected_accent_index).setChecked(True)
+        self._accent_button_group.idClicked.connect(
+            lambda index: self._select_accent_color(self._accent_colors_by_index[index], on_accent_color)
+        )
+        theme_card_layout.addLayout(accents_row)
+
+        appearance_card = self._card(appearance_page)
         self.show_clip_indexes = self._add_switch(
             appearance_card, "Show Clip Indexes", "Display the keyboard index on each clip.", show_clip_indexes, on_show_clip_indexes
         )
@@ -520,8 +666,20 @@ class SettingsDialog(QDialog):
             switch._disabled_thumb_color = QColor(p["disabled_thumb"])
         for combo in self.findChildren(MacComboBox):
             combo.set_theme_colors(p)
+        selected_theme = (theme or {}).get("name")
+        for theme_id, button in self._theme_buttons.items():
+            button.set_palette(p, self._theme_previews.get(theme_id, p["background"]))
+            button.setChecked(theme_id == selected_theme)
+        for button in self._accent_buttons.values():
+            button.set_palette(p)
         self.setWindowTitle(appearance.WINDOW_TITLE)
         self.setStyleSheet(appearance.settings_stylesheet(p))
+
+    def _select_accent_color(self, color, callback):
+        self._accent_color = color
+        for value, button in self._accent_buttons.items():
+            button.setChecked(value == color.lower())
+        callback(color)
 
     def _set_oversize_warning_availability(self, prevention_enabled):
         self.oversize_warning.setEnabled(bool(prevention_enabled))

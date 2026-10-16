@@ -1,6 +1,7 @@
 {
   "name": "dark_pro",
   "display_name": "Dark Pro",
+  "accent_options": ["#007AFF", "#6155F5", "#4E5DC6", "#7AB94D", "#FF6C3A"],
   "settings": {
     "background": "#0c0c0c",
     "surface": "#242424",
@@ -11,11 +12,11 @@
     "control_hover_background": "#303030",
     "control_hover_border": "#303030",
     "control_focus_border": "#454545",
-    "text": "#bababa",
+    "text": "#cecece",
     "secondary_text": "#909090",
     "accent": "#007AFF",
     "danger": "#DE5C5C",
-    "white": "#ffffff",
+    "white": "#cecece",
     "switch_off": "#4b5263",
     "switch_disabled": "#323844",
     "disabled_thumb": "#abb2bf"
@@ -33,7 +34,7 @@
     "pinned": "#292929",
     "pinned_border": "#292929",
     "pressed": "#292929",
-    "text": "#bababa",
+    "text": "#cecece",
     "index": "#505050",
     "open_icon_color": "#606060",
     "icon_color": "#007AFF",
@@ -48,7 +49,7 @@
     "border": "#272727",
     "hover": "#202020",
     "text": "#007AFF",
-    "icon_color": "#bababa",
+    "icon_color": "#cecece",
     "destructive_icon_color": "#007AFF"
   },
   "empty": {
@@ -68,16 +69,16 @@
   "notification": {
     "background": "#242424",
     "border": "#272727",
-    "text": "#bababa",
+    "text": "#cecece",
     "muted_text": "#909090",
     "accent": "#007AFF"
   },
   "tray_menu": {
     "background": "#242424",
     "border": "#272727",
-    "text": "#bababa",
+    "text": "#cecece",
     "accent": "#007AFF",
-    "selected_text": "#bababa",
+    "selected_text": "#cecece",
     "separator": "#282828"
   }
 }

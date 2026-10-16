@@ -235,6 +235,7 @@ class MainWindow(QWidget):
         self.theme_manager = ThemeManager()
         self.theme_name = self._load_theme_name()
         self.theme = self.theme_manager.get_theme(self.theme_name)
+        self.accent_color = self.theme.get("accent_options", [self.theme["settings"]["accent"]])[0]
         self.show_on_hover_enabled = SHELF_SHOW_ON_HOVER
         self.hide_on_paste_enabled = HIDE_ON_PASTE
         self.highlight_shelf_on_drag_enabled = True
@@ -1045,7 +1046,9 @@ class MainWindow(QWidget):
 
     def _apply_theme(self, theme_name):
         self.theme_name = self.theme_manager.get_theme(theme_name)["name"]
-        self.theme = self.theme_manager.get_theme(self.theme_name)
+        self.theme = self.theme_manager.with_accent_color(
+            self.theme_manager.get_theme(self.theme_name), self.accent_color
+        )
         set_active_theme(self.theme_name)
         if hasattr(self, "scroll"):
             self.scroll.set_theme(self.theme)
@@ -1105,6 +1108,18 @@ class MainWindow(QWidget):
         self._apply_theme(theme_name)
         self._save_context_menu_settings()
 
+    def set_accent_color(self, color):
+        color = str(color).upper()
+        available = {
+            value.upper()
+            for value in self.theme_manager.get_theme(self.theme_name).get("accent_options", [])
+        }
+        if color not in available or color == self.accent_color.upper():
+            return
+        self.accent_color = color
+        self._apply_theme(self.theme_name)
+        self._save_context_menu_settings()
+
     def _load_context_menu_settings(self):
         settings_path = self._context_menu_settings_path()
         if not settings_path.exists():
@@ -1155,6 +1170,12 @@ class MainWindow(QWidget):
             self.start_with_windows_enabled = bool(settings.get("start_with_windows_enabled", self.start_with_windows_enabled))
             self.theme_name = self.theme_manager.get_theme(settings.get("theme", self.theme_name))["name"]
             self.theme = self.theme_manager.get_theme(self.theme_name)
+            accent_options = self.theme.get("accent_options", [])
+            saved_accent = str(settings.get("accent_color", self.accent_color)).upper()
+            self.accent_color = (
+                saved_accent if saved_accent in {value.upper() for value in accent_options}
+                else (accent_options[0] if accent_options else self.theme["settings"]["accent"])
+            )
             self.max_chips = max(
                 MAX_CHIPS_MIN,
                 min(MAX_CHIPS_MAX, int(settings.get("max_chips", self.max_chips))),
@@ -1213,6 +1234,7 @@ class MainWindow(QWidget):
                         "history_retention_days": self.history_retention_days,
                         "shelf_width_ratio": self.shelf_width_ratio,
                         "theme": self.theme_name,
+                        "accent_color": self.accent_color,
                         "chip_width_defaults_version": CHIP_WIDTH_DEFAULTS_VERSION,
                     },
                     settings_file,
@@ -1282,6 +1304,12 @@ class MainWindow(QWidget):
             history_retention_days=self.history_retention_days,
             theme_name=self.theme_name,
             available_themes=self.theme_manager.available_themes(),
+            theme_previews={
+                theme_id: self.theme_manager.get_theme(theme_id)["settings"]["background"]
+                for theme_id, _ in self.theme_manager.available_themes()
+            },
+            accent_color=self.accent_color,
+            accent_options=self.theme.get("accent_options", []),
             theme=self.theme,
             on_show_on_hover=self.set_show_on_hover_enabled,
             on_hide_on_paste=self.set_hide_on_paste_enabled,
@@ -1303,6 +1331,7 @@ class MainWindow(QWidget):
             on_history_retention_days=self.set_history_retention_days,
             on_clear_all_history=self.clear_all_history,
             on_theme=self.set_theme,
+            on_accent_color=self.set_accent_color,
             parent=None,
         )
         self._settings_dialog.setWindowIcon(create_app_icon())

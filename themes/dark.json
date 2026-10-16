@@ -1,6 +1,7 @@
 {
   "name": "dark",
   "display_name": "Dark",
+  "accent_options": ["#007AFF", "#6155F5", "#4E5DC6", "#7AB94D", "#FF6C3A"],
   "settings": {
     "background": "#141414",
     "surface": "#232323",

@@ -328,6 +328,9 @@ class ChipWidget(QWidget):
             }}
         """)
         self.apply_style()
+        # File and folder glyphs are tinted pixmaps, so regenerate them when the
+        # active theme or accent changes instead of only updating label colors.
+        self.update_label()
 
     def set_hovered(self, hovered):
         hovered = bool(hovered)

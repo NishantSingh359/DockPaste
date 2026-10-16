@@ -141,6 +141,26 @@ NAV_ICON_PATHS = {
     ),
 }
 
+THEME_PICKER = {
+    "card_margins": (20, 18, 20, 20),
+    "option_size": (132, 88),
+    "swatch_inset": 10,
+    "swatch_height": 42,
+    "swatch_radius": 21,
+    "label_gap": 7,
+    "row_spacing": 18,
+    "section_title_size": 23,
+    "section_title_weight": 500,
+    "section_gap": 14,
+}
+ACCENT_PICKER = {
+    "swatch_size": 52,
+    "ring_inset": 3,
+    "border_width": 2,
+    "row_spacing": 20,
+    "section_gap": 22,
+}
+
 
 # Shared non-color appearance settings for the shelf and its contents.
 # Theme JSON files supply all color values.
@@ -324,6 +344,7 @@ def settings_stylesheet(palette):
         QLabel#settingsNavLabel {{ color: {p['text']}; font-weight: {f['sidebar_weight']}; }}
         QLabel#pageHeading {{ color: {p['text']}; font-size: {f['page_title_size']}px; font-weight: {f['page_title_weight']}; }}
         QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: {SUBTITLE_BOTTOM_PADDING}px; }}
+        QLabel#appearanceSectionTitle {{ color: {p['text']}; font-size: {THEME_PICKER['section_title_size']}px; font-weight: {THEME_PICKER['section_title_weight']}; }}
         QFrame#settingsCard {{ background: {p['surface']}; border: {SETTINGS_CARD_BORDER_WIDTH}px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
         QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
