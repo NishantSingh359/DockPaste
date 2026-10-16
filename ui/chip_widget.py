@@ -430,7 +430,9 @@ class ChipWidget(QWidget):
     @staticmethod
     def parse_color_code(text):
         value = text.strip()
-        hex_match = re.fullmatch(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", value)
+        # Require the CSS/HTML hex prefix: plain numeric or alphanumeric text
+        # such as "662621" is ordinary clipboard content, not a color token.
+        hex_match = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", value)
         if hex_match:
             digits = hex_match.group(1)
             if len(digits) in (3, 4):
