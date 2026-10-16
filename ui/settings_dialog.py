@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -140,7 +140,6 @@ class ThemeOptionButton(QPushButton):
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAccessibleName(f"{title} theme")
-        self.setToolTip(f"Use the {title} theme")
         self.setFixedSize(*appearance.THEME_PICKER["option_size"])
         self.setStyleSheet("QPushButton { background: transparent; border: none; }")
 
@@ -184,66 +183,33 @@ class ThemeOptionButton(QPushButton):
         )
         preview_background = QColor(self._preview_colors.get("background", self._surface_color.name()))
         preview_surface = QColor(self._preview_colors.get("surface", self._surface_color.name()))
-        preview_border = QColor(self._preview_colors.get("border", self._border_color.name()))
-        preview_text = QColor(self._preview_colors.get("text", self._text_color.name()))
-        preview_muted = QColor(self._preview_colors.get("secondary_text", self._text_color.name()))
         preview_accent = self._accent_color
-        painter.setPen(QPen(preview_border, 1))
-        painter.setBrush(preview_background)
+        gradient = QLinearGradient(preview.topLeft(), preview.bottomRight())
+        gradient.setColorAt(0.0, preview_background)
+        gradient.setColorAt(1.0, preview_surface)
+        # Keep the thumbnail quiet: the theme card itself carries the outline,
+        # while the preview reads as a small color sample rather than a mock UI.
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
         painter.drawRoundedRect(preview, cfg["preview_radius"], cfg["preview_radius"])
 
-        topbar = cfg["preview_topbar_height"]
+        inset = cfg["preview_panel_inset"]
+        panel = preview.adjusted(inset, inset, -inset, -inset)
+        panel.setRight(panel.right() - cfg["preview_accent_size"] // 2)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(preview_surface)
-        painter.drawRoundedRect(
-            preview.adjusted(1, 1, -1, -(preview.height() - topbar - 1)),
-            cfg["preview_radius"] - 1,
-            cfg["preview_radius"] - 1,
+        painter.drawRoundedRect(panel, cfg["preview_panel_radius"], cfg["preview_panel_radius"])
+
+        accent_size = cfg["preview_accent_size"]
+        accent_tile = QRect(
+            preview.right() - accent_size - 8,
+            preview.bottom() - accent_size - 8,
+            accent_size,
+            accent_size,
         )
-        for dot_index in range(3):
-            dot_color = QColor(preview_muted)
-            dot_color.setAlpha(150)
-            painter.setBrush(dot_color)
-            painter.drawEllipse(preview.left() + 7 + dot_index * 6, preview.top() + 5, 3, 3)
-
-        content_top = preview.top() + topbar
-        sidebar = preview.adjusted(1, topbar, -(preview.width() - cfg["preview_sidebar_width"] - 1), -1)
-        painter.setBrush(preview_surface)
-        painter.drawRect(sidebar)
-        nav_y = content_top + 7
+        painter.setPen(QPen(preview_background, 1))
         painter.setBrush(preview_accent)
-        painter.setOpacity(0.28)
-        painter.drawRoundedRect(sidebar.left() + 3, nav_y, sidebar.width() - 6, 8, 3, 3)
-        painter.setOpacity(1.0)
-        painter.setBrush(preview_text)
-        painter.drawRoundedRect(sidebar.left() + 7, nav_y + 3, max(4, sidebar.width() - 15), 2, 1, 1)
-        painter.setBrush(preview_muted)
-        for line_y in (nav_y + 17, nav_y + 28):
-            painter.drawRoundedRect(sidebar.left() + 7, line_y, max(4, sidebar.width() - 15), 2, 1, 1)
-
-        main_left = sidebar.right() + cfg["preview_content_inset"]
-        main_width = max(12, preview.right() - main_left - cfg["preview_content_inset"])
-        painter.setBrush(preview_text)
-        painter.drawRoundedRect(main_left, content_top + 8, main_width * 0.42, 3, 1, 1)
-        card_top = content_top + 17
-        card_bottom = preview.bottom() - 4
-        painter.setPen(QPen(preview_border, 0.6))
-        painter.setBrush(preview_surface)
-        painter.drawRoundedRect(QRect(main_left, card_top, main_width, card_bottom - card_top), 4, 4)
-        painter.setPen(Qt.PenStyle.NoPen)
-        row_height = cfg["preview_row_height"]
-        first_row_y = card_top + 5
-        painter.setBrush(preview_text)
-        painter.drawRoundedRect(main_left + 5, first_row_y + 2, main_width * 0.43, 2, 1, 1)
-        toggle = QRect(preview.right() - 18, first_row_y, 12, 7)
-        painter.setBrush(preview_accent)
-        painter.drawRoundedRect(toggle, 3.5, 3.5)
-        divider_y = card_top + row_height
-        painter.setPen(QPen(preview_border, 0.7))
-        painter.drawLine(main_left + 4, divider_y, preview.right() - 5, divider_y)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(preview_muted)
-        painter.drawRoundedRect(main_left + 5, divider_y + 7, main_width * 0.34, 2, 1, 1)
+        painter.drawRoundedRect(accent_tile, cfg["preview_accent_radius"], cfg["preview_accent_radius"])
 
         painter.setPen(self._text_color)
         font = painter.font()
@@ -280,7 +246,6 @@ class AccentColorButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._label = label
         self.setAccessibleName(f"{label} accent color")
-        self.setToolTip(f"{label} accent color")
         self.setFixedSize(*appearance.ACCENT_PICKER["option_size"])
         self.setStyleSheet("QPushButton { background: transparent; border: none; }")
 
