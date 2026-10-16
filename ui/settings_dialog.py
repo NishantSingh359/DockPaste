@@ -1,5 +1,5 @@
-from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPen
+from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray, QUrl
+from PySide6.QtGui import QDesktopServices, QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -368,7 +368,7 @@ class SettingsDialog(QDialog):
         self.sidebar.setFocusPolicy(Qt.NoFocus)
         self.sidebar.setUniformItemSizes(True)
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.sidebar.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.pages = QStackedWidget()
         self.pages.setObjectName("settingsPages")
         self.pages.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -378,7 +378,12 @@ class SettingsDialog(QDialog):
 
         self._nav_rows = []
         self._nav_icons = []
-        for icon_name, page_name in (("general", "General"), ("appearance", "Appearance"), ("history", "History")):
+        for icon_name, page_name in (
+            ("general", "General"),
+            ("appearance", "Appearance"),
+            ("history", "History"),
+            ("support", "Support"),
+        ):
             self._add_nav_item(icon_name, page_name)
         self.sidebar.currentRowChanged.connect(self._on_nav_changed)
         self.sidebar.setCurrentRow(0)
@@ -568,6 +573,34 @@ class SettingsDialog(QDialog):
         )
         self._add_page(history)
 
+        support = self._new_page("Support", "Support DockPaste and help the project grow.")
+        support_card = self._card(support)
+        support_links = (
+            (
+                "Buy Me a Coffee",
+                "Support development with a one-time contribution.",
+                "https://studio.buymeacoffee.com/dashboard",
+            ),
+            (
+                "LinkedIn",
+                "Visit LinkedIn for project updates and community news.",
+                "https://www.linkedin.com/in/nishantsinghinfo",
+            ),
+            (
+                "GitHub",
+                "Explore the source, report issues, or contribute code.",
+                "https://github.com/NishantSingh359/DockPaste",
+            ),
+        )
+        for title, description, url in support_links:
+            link_button = QPushButton("Open")
+            link_button.setObjectName("supportLinkButton")
+            link_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            link_button.setAccessibleName(f"Open {title}")
+            link_button.clicked.connect(lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target)))
+            self._add_control_row(support_card, title, description, link_button)
+        self._add_page(support)
+
         self.set_theme(theme)
         self.setMaximumSize(*appearance.WINDOW_MAX_SIZE)
         primary_screen = QApplication.primaryScreen()
@@ -651,6 +684,7 @@ class SettingsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setWidget(page)
         self.pages.addWidget(scroll)
 

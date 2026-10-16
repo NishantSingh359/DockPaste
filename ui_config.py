@@ -139,6 +139,9 @@ NAV_ICON_PATHS = {
         '<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/>'
         '<path d="M12 7v5l3 2"/>'
     ),
+    "support": (
+        '<path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8A4.3 4.3 0 0 1 11 6.1l1 1.1 1-1.1a4.3 4.3 0 0 1 7.8 2.7z"/>'
+    ),
 }
 
 THEME_PICKER = {
@@ -361,6 +364,9 @@ def settings_stylesheet(palette):
         QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
         QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: {p['danger']}; }}
         QPushButton#clearHistoryButton:pressed {{ background: {p['surface_hover']}; }}
+        QPushButton#supportLinkButton {{ color: {p['text']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['control_border']}; border-radius: {CONTROL_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
+        QPushButton#supportLinkButton:hover {{ background: {p['control_hover_background']}; border-color: {p['control_hover_border']}; }}
+        QPushButton#supportLinkButton:pressed {{ background: {p['surface_hover']}; }}
         QLabel#settingTitle {{ color: {p['text']}; font-size: {f['setting_title_size']}px; font-weight: {f['setting_title_weight']}; }}
         QLabel#settingDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
         QCheckBox#settingsSwitch {{ background: transparent; border: none; }}
