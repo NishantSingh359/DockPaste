@@ -1305,7 +1305,10 @@ class MainWindow(QWidget):
             theme_name=self.theme_name,
             available_themes=self.theme_manager.available_themes(),
             theme_previews={
-                theme_id: self.theme_manager.get_theme(theme_id)["settings"]["background"]
+                theme_id: {
+                    key: self.theme_manager.get_theme(theme_id)["settings"][key]
+                    for key in ("background", "surface", "border", "text", "secondary_text")
+                }
                 for theme_id, _ in self.theme_manager.available_themes()
             },
             accent_color=self.accent_color,

@@ -1,4 +1,4 @@
-from PySide6.QtCore import QEasingCurve, QPoint, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
+from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
@@ -127,13 +127,15 @@ class SettingsNavIcon(QWidget):
 class ThemeOptionButton(QPushButton):
     """Theme preview swatch with a clear selected outline and label."""
 
-    def __init__(self, theme_id, title, preview_color, palette, parent=None):
+    def __init__(self, theme_id, title, preview_colors, palette, parent=None):
         super().__init__(parent)
         self.theme_id = theme_id
-        self._preview_color = QColor(preview_color)
+        self._preview_colors = dict(preview_colors)
         self._text_color = QColor(palette["text"])
         self._border_color = QColor(palette["border"])
         self._accent_color = QColor(palette["accent"])
+        self._surface_color = QColor(palette["surface"])
+        self._hovered = False
         self._title = title
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -142,47 +144,144 @@ class ThemeOptionButton(QPushButton):
         self.setFixedSize(*appearance.THEME_PICKER["option_size"])
         self.setStyleSheet("QPushButton { background: transparent; border: none; }")
 
-    def set_palette(self, palette, preview_color=None):
+    def set_palette(self, palette, preview_colors=None):
         self._text_color = QColor(palette["text"])
         self._border_color = QColor(palette["border"])
         self._accent_color = QColor(palette["accent"])
-        if preview_color is not None:
-            self._preview_color = QColor(preview_color)
+        self._surface_color = QColor(palette["surface"])
+        if preview_colors is not None:
+            self._preview_colors = dict(preview_colors)
         self.update()
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         cfg = appearance.THEME_PICKER
-        inset = cfg["swatch_inset"]
-        swatch = self.rect().adjusted(inset, 4, -inset, -(self.height() - cfg["swatch_height"] - 4))
-        painter.setPen(QPen(self._accent_color if self.isChecked() else self._border_color,
-                            appearance.CONTROL_FOCUS_BORDER_WIDTH if self.isChecked() else appearance.CONTROL_BORDER_WIDTH))
-        painter.setBrush(self._preview_color)
-        painter.drawRoundedRect(swatch, cfg["swatch_radius"], cfg["swatch_radius"])
+        option_rect = self.rect().adjusted(1, 1, -1, -1)
+        outline = self._accent_color if self.isChecked() else self._border_color
+        if self._hovered and not self.isChecked():
+            outline = QColor(self._text_color)
+            outline.setAlpha(100)
+        painter.setPen(QPen(outline, 1.5 if self.isChecked() else 1))
+        painter.setBrush(self._surface_color)
+        painter.drawRoundedRect(option_rect, cfg["option_radius"], cfg["option_radius"])
+
+        preview = option_rect.adjusted(
+            cfg["preview_inset"],
+            cfg["preview_inset"],
+            -cfg["preview_inset"],
+            -(option_rect.height() - cfg["preview_height"] - cfg["preview_inset"]),
+        )
+        preview_background = QColor(self._preview_colors.get("background", self._surface_color.name()))
+        preview_surface = QColor(self._preview_colors.get("surface", self._surface_color.name()))
+        preview_border = QColor(self._preview_colors.get("border", self._border_color.name()))
+        preview_text = QColor(self._preview_colors.get("text", self._text_color.name()))
+        preview_muted = QColor(self._preview_colors.get("secondary_text", self._text_color.name()))
+        preview_accent = self._accent_color
+        painter.setPen(QPen(preview_border, 1))
+        painter.setBrush(preview_background)
+        painter.drawRoundedRect(preview, cfg["preview_radius"], cfg["preview_radius"])
+
+        topbar = cfg["preview_topbar_height"]
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(preview_surface)
+        painter.drawRoundedRect(
+            preview.adjusted(1, 1, -1, -(preview.height() - topbar - 1)),
+            cfg["preview_radius"] - 1,
+            cfg["preview_radius"] - 1,
+        )
+        for dot_index in range(3):
+            dot_color = QColor(preview_muted)
+            dot_color.setAlpha(150)
+            painter.setBrush(dot_color)
+            painter.drawEllipse(preview.left() + 7 + dot_index * 6, preview.top() + 5, 3, 3)
+
+        content_top = preview.top() + topbar
+        sidebar = preview.adjusted(1, topbar, -(preview.width() - cfg["preview_sidebar_width"] - 1), -1)
+        painter.setBrush(preview_surface)
+        painter.drawRect(sidebar)
+        nav_y = content_top + 7
+        painter.setBrush(preview_accent)
+        painter.setOpacity(0.28)
+        painter.drawRoundedRect(sidebar.left() + 3, nav_y, sidebar.width() - 6, 8, 3, 3)
+        painter.setOpacity(1.0)
+        painter.setBrush(preview_text)
+        painter.drawRoundedRect(sidebar.left() + 7, nav_y + 3, max(4, sidebar.width() - 15), 2, 1, 1)
+        painter.setBrush(preview_muted)
+        for line_y in (nav_y + 17, nav_y + 28):
+            painter.drawRoundedRect(sidebar.left() + 7, line_y, max(4, sidebar.width() - 15), 2, 1, 1)
+
+        main_left = sidebar.right() + cfg["preview_content_inset"]
+        main_width = max(12, preview.right() - main_left - cfg["preview_content_inset"])
+        painter.setBrush(preview_text)
+        painter.drawRoundedRect(main_left, content_top + 8, main_width * 0.42, 3, 1, 1)
+        card_top = content_top + 17
+        card_bottom = preview.bottom() - 4
+        painter.setPen(QPen(preview_border, 0.6))
+        painter.setBrush(preview_surface)
+        painter.drawRoundedRect(QRect(main_left, card_top, main_width, card_bottom - card_top), 4, 4)
+        painter.setPen(Qt.PenStyle.NoPen)
+        row_height = cfg["preview_row_height"]
+        first_row_y = card_top + 5
+        painter.setBrush(preview_text)
+        painter.drawRoundedRect(main_left + 5, first_row_y + 2, main_width * 0.43, 2, 1, 1)
+        toggle = QRect(preview.right() - 18, first_row_y, 12, 7)
+        painter.setBrush(preview_accent)
+        painter.drawRoundedRect(toggle, 3.5, 3.5)
+        divider_y = card_top + row_height
+        painter.setPen(QPen(preview_border, 0.7))
+        painter.drawLine(main_left + 4, divider_y, preview.right() - 5, divider_y)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(preview_muted)
+        painter.drawRoundedRect(main_left + 5, divider_y + 7, main_width * 0.34, 2, 1, 1)
+
         painter.setPen(self._text_color)
         font = painter.font()
         font.setFamily(appearance.FONT_FAMILY)
-        font.setPointSize(appearance.FONT["sidebar_size"])
+        font.setPointSize(cfg["option_label_size"])
         font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Medium)
         painter.setFont(font)
-        label_rect = self.rect().adjusted(0, cfg["swatch_height"] + cfg["label_gap"], 0, 0)
-        painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._title)
+        label_rect = option_rect.adjusted(10, cfg["preview_height"] + 10, -24, 0)
+        painter.drawText(label_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self._title)
+        if self.isChecked():
+            badge_size = cfg["selected_badge_size"]
+            badge = option_rect.adjusted(
+                option_rect.width() - badge_size - 9,
+                option_rect.height() - badge_size - 7,
+                -9,
+                -7,
+            )
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._accent_color)
+            painter.drawEllipse(badge)
+            painter.setPen(QPen(QColor("#FFFFFF"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.drawLine(badge.left() + 3, badge.center().y(), badge.left() + 6, badge.center().y() + 3)
+            painter.drawLine(badge.left() + 6, badge.center().y() + 3, badge.left() + 11, badge.center().y() - 3)
 
 
 class AccentColorButton(QPushButton):
     """Circular accessible accent-color choice."""
 
-    def __init__(self, color, palette, parent=None):
+    def __init__(self, color, palette, label, parent=None):
         super().__init__(parent)
         self.accent_color = color
         self._selection_color = QColor(palette["text"])
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setAccessibleName(f"Accent color {color}")
-        self.setToolTip(f"Accent color {color}")
-        size = appearance.ACCENT_PICKER["swatch_size"]
-        self.setFixedSize(size, size)
+        self._label = label
+        self.setAccessibleName(f"{label} accent color")
+        self.setToolTip(f"{label} accent color")
+        self.setFixedSize(*appearance.ACCENT_PICKER["option_size"])
         self.setStyleSheet("QPushButton { background: transparent; border: none; }")
 
     def set_palette(self, palette):
@@ -192,19 +291,35 @@ class AccentColorButton(QPushButton):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect().adjusted(2, 2, -2, -2)
+        cfg = appearance.ACCENT_PICKER
+        diameter = cfg["swatch_size"]
+        circle = QRect(
+            (self.width() - diameter) // 2,
+            cfg["swatch_top"],
+            diameter,
+            diameter,
+        )
         if self.isChecked():
-            painter.setPen(QPen(self._selection_color, appearance.ACCENT_PICKER["border_width"]))
+            painter.setPen(QPen(self._selection_color, cfg["border_width"]))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            ring = rect.adjusted(1, 1, -1, -1)
+            ring = circle.adjusted(-2, -2, 2, 2)
             painter.drawEllipse(ring)
-            rect = rect.adjusted(appearance.ACCENT_PICKER["ring_inset"],
-                                appearance.ACCENT_PICKER["ring_inset"],
-                                -appearance.ACCENT_PICKER["ring_inset"],
-                                -appearance.ACCENT_PICKER["ring_inset"])
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(self.accent_color))
-        painter.drawEllipse(rect)
+        painter.drawEllipse(circle)
+        label_font = painter.font()
+        label_font.setFamily(appearance.FONT_FAMILY)
+        label_font.setPointSize(cfg["label_size"])
+        label_font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Medium)
+        painter.setFont(label_font)
+        painter.setPen(self._selection_color if self.isChecked() else QColor(self._selection_color.red(), self._selection_color.green(), self._selection_color.blue(), 175))
+        label_rect = self.rect().adjusted(
+            0,
+            cfg["swatch_top"] + diameter + cfg["label_gap"],
+            0,
+            0,
+        )
+        painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._label)
 
 
 class SettingsDialog(QDialog):
@@ -363,7 +478,7 @@ class SettingsDialog(QDialog):
             option = ThemeOptionButton(
                 theme_id,
                 display_name,
-                theme_previews.get(theme_id, self._theme_palette["background"]),
+                theme_previews.get(theme_id, {}),
                 self._theme_palette,
             )
             self._theme_buttons[theme_id] = option
@@ -380,7 +495,7 @@ class SettingsDialog(QDialog):
             lambda index: on_theme(self._theme_ids_by_index[index])
         )
         theme_card_layout.addLayout(themes_row)
-        theme_card_layout.addSpacing(appearance.ACCENT_PICKER["section_gap"])
+        theme_card_layout.addSpacing(appearance.THEME_PICKER["accent_section_gap"])
         accent_heading = QLabel("Accent Color")
         accent_heading.setObjectName("appearanceSectionTitle")
         theme_card_layout.addWidget(accent_heading)
@@ -392,7 +507,12 @@ class SettingsDialog(QDialog):
         self._accent_button_group.setExclusive(True)
         self._accent_colors_by_index = {}
         for index, color in enumerate(accent_options):
-            option = AccentColorButton(color, self._theme_palette)
+            label = (
+                appearance.ACCENT_LABELS[index]
+                if index < len(appearance.ACCENT_LABELS)
+                else f"Accent {index + 1}"
+            )
+            option = AccentColorButton(color, self._theme_palette, label)
             self._accent_buttons[color.lower()] = option
             self._accent_colors_by_index[index] = color
             self._accent_button_group.addButton(option, index)
@@ -668,7 +788,7 @@ class SettingsDialog(QDialog):
             combo.set_theme_colors(p)
         selected_theme = (theme or {}).get("name")
         for theme_id, button in self._theme_buttons.items():
-            button.set_palette(p, self._theme_previews.get(theme_id, p["background"]))
+            button.set_palette(p, self._theme_previews.get(theme_id, {}))
             button.setChecked(theme_id == selected_theme)
         for button in self._accent_buttons.values():
             button.set_palette(p)

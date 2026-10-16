@@ -142,24 +142,35 @@ NAV_ICON_PATHS = {
 }
 
 THEME_PICKER = {
-    "card_margins": (20, 18, 20, 20),
-    "option_size": (132, 88),
-    "swatch_inset": 10,
-    "swatch_height": 42,
-    "swatch_radius": 21,
-    "label_gap": 7,
-    "row_spacing": 18,
+    "card_margins": (22, 20, 22, 22),
+    "option_size": (166, 126),
+    "preview_inset": 7,
+    "preview_height": 78,
+    "preview_radius": 9,
+    "preview_topbar_height": 13,
+    "preview_sidebar_width": 27,
+    "preview_content_inset": 6,
+    "preview_row_height": 17,
+    "option_radius": 11,
+    "option_label_size": 13,
+    "row_spacing": 14,
+    "selected_badge_size": 14,
     "section_title_size": 23,
     "section_title_weight": 500,
-    "section_gap": 14,
+    "section_gap": 12,
+    "accent_section_gap": 18,
 }
 ACCENT_PICKER = {
-    "swatch_size": 52,
-    "ring_inset": 3,
+    "option_size": (66, 68),
+    "swatch_size": 40,
+    "swatch_top": 5,
+    "ring_inset": 4,
     "border_width": 2,
-    "row_spacing": 20,
-    "section_gap": 22,
+    "row_spacing": 12,
+    "label_size": 10,
+    "label_gap": 5,
 }
+ACCENT_LABELS = ("Blue", "Violet", "Indigo", "Amber", "Coral")
 
 
 # Shared non-color appearance settings for the shelf and its contents.
