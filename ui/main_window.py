@@ -414,8 +414,6 @@ class MainWindow(QWidget):
             and self._history_date_filter != clip_date
         ):
             return
-        if content in self.chips_by_content:
-            return
 
         if clip_index is None:
             try:
@@ -426,6 +424,22 @@ class MainWindow(QWidget):
                 log_exception("Failed to retrieve clipboard index")
 
         self._clip_dates_by_content[content] = clip_date
+        existing_chip = self.chips_by_content.get(content)
+        if existing_chip is not None:
+            if clip_index is not None:
+                existing_chip.set_clip_index(
+                    clip_index,
+                    show_index=self.clip_indexing_enabled,
+                )
+                # Resurfacing a duplicate renumbers every clip for that day.
+                # Refresh all cached indexes before sorting; otherwise the
+                # shelf can compare the new index against stale sibling indexes.
+                self._refresh_clip_indexes_for_date(clip_date)
+                self._reorder_chip(existing_chip)
+                self.scroll.horizontalScrollBar().setValue(
+                    self.scroll.horizontalScrollBar().minimum()
+                )
+            return
         self.add_chip(content, clip_index, pinned=pinned)
 
     def set_history_date_filter(self, clip_date):
@@ -602,14 +616,17 @@ class MainWindow(QWidget):
             except Exception:
                 log_exception("Failed to save clipboard pin state")
 
+        self._reorder_chip(chip)
+
+    def _reorder_chip(self, chip):
+        if not chip or getattr(chip, "_is_deleting", False):
+            return
         self._finish_chip_position_animation()
         chip._is_reordering = True
-        chips = self.chip_widgets()
-        start_positions = {item: item.pos() for item in chips}
+        start_positions = {item: item.pos() for item in self.chip_widgets()}
         self.chip_layout.removeWidget(chip)
         self.insert_chip(chip)
         self.refresh_chip_indexes()
-
         self._animate_chip_layout(
             start_positions,
             CHIP_LAYOUT_ANIMATION_MS,
@@ -700,15 +717,19 @@ class MainWindow(QWidget):
             if widget is getattr(self, "empty_state_widget", None):
                 continue
 
-            if getattr(widget, "pinned", False):
+            widget_is_pinned = bool(getattr(widget, "pinned", False))
+            if widget_is_pinned and not chip.pinned:
                 insert_at = layout_index + 1
                 continue
-
-            if chip.pinned:
+            if chip.pinned and not widget_is_pinned:
                 break
 
             existing_number = getattr(widget, "clip_index", None)
-            if existing_number is None or chip.clip_index > existing_number:
+            if (
+                existing_number is None
+                or chip.clip_index is None
+                or chip.clip_index > existing_number
+            ):
                 insert_at = layout_index
                 break
             insert_at = layout_index + 1

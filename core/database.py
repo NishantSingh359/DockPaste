@@ -254,7 +254,8 @@ class ClipboardDatabase:
             content: The clipboard content string.
 
         Returns:
-            The row id of the inserted record, or None if it already exists.
+            The row id of a newly inserted record, or None when an existing
+            record was resurfaced for today.
         """
         return self.insert_with_type(content, detect_type(content))
 
@@ -266,6 +267,7 @@ class ClipboardDatabase:
             (clip_date, content),
         ).fetchone()
         if existing:
+            ClipboardDatabase._move_to_latest(conn, clip_date, existing["rowid"])
             return None
         next_index = conn.execute(
             'SELECT COALESCE(MAX("index"), 0) + 1 FROM clips WHERE date = ?',
@@ -277,12 +279,36 @@ class ClipboardDatabase:
         )
         return cursor.lastrowid
 
+    @staticmethod
+    def _move_to_latest(conn, clip_date, record_id):
+        """Move a repeated clip to the newest daily index without changing pin state."""
+        rows = conn.execute(
+            'SELECT rowid, "index" FROM clips WHERE date = ? ORDER BY "index"',
+            (clip_date,),
+        ).fetchall()
+        record_ids = [row["rowid"] for row in rows]
+        if not record_ids or record_ids[-1] == record_id:
+            return
+
+        offset = max(int(row["index"]) for row in rows) + len(rows) + 1
+        conn.execute(
+            'UPDATE clips SET "index" = "index" + ? WHERE date = ?',
+            (offset, clip_date),
+        )
+        ordered_ids = [item_id for item_id in record_ids if item_id != record_id]
+        ordered_ids.append(record_id)
+        for new_index, item_id in enumerate(ordered_ids, start=1):
+            conn.execute(
+                'UPDATE clips SET "index" = ? WHERE rowid = ?',
+                (new_index, item_id),
+            )
+
     def insert_with_type(self, content: str, clip_type: str) -> int | None:
         """
         Insert an item with an explicit type and assign its next daily index.
 
-        Returns the compatibility row handle, or None for a duplicate on
-        today's date.
+        Returns the row handle for a new clip, or None when an existing clip
+        was moved to the newest position for today.
         """
         if clip_type not in ("link", "text", "path", "img"):
             raise ValueError(

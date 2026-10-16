@@ -674,7 +674,7 @@ class ClipboardManager(QObject):
                     if self.enforce_size_limit and is_oversized_text(content):
                         rejected_oversized_item = True
                         continue
-                    if not content or content == self._last_text:
+                    if not content:
                         continue
                     self._last_text = content
                     try:
@@ -692,13 +692,12 @@ class ClipboardManager(QObject):
             self._clipboard_image_snapshot_hash = None
             self._clipboard_rich_formats_snapshot = {}
             if not self.enforce_size_limit or not is_oversized_text(html_link):
-                if html_link != self._last_text:
-                    self._last_text = html_link
-                    try:
-                        self.db.insert_with_type(html_link, "link")
-                        self.text_copied.emit(html_link)
-                    except Exception:
-                        log_exception("Failed to store clipboard HTML link")
+                self._last_text = html_link
+                try:
+                    self.db.insert_with_type(html_link, "link")
+                    self.text_copied.emit(html_link)
+                except Exception:
+                    log_exception("Failed to store clipboard HTML link")
             else:
                 self.oversized_item_rejected.emit()
             return
@@ -727,7 +726,7 @@ class ClipboardManager(QObject):
             return
 
         text = raw_text.strip()
-        if not text or text == self._last_text:
+        if not text:
             return
 
         self._last_text = text
