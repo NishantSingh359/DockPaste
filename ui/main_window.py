@@ -257,7 +257,9 @@ class MainWindow(QWidget):
         self._history_load_tasks = {}
         self._history_live_additions = {}
         self._history_records_to_render = []
+        self._history_pending_records = {}
         self._history_render_index = 0
+        self._history_render_limit = 0
         self._history_loading = False
         self._history_bulk_rendering = False
         self._history_load_pool = QThreadPool(self)
@@ -396,6 +398,12 @@ class MainWindow(QWidget):
 
         self.scroll = ChipBar(self.theme)
         self.scroll.set_scroll_speed(self.clip_scroll_speed)
+        self.scroll.horizontalScrollBar().valueChanged.connect(
+            self._maybe_load_history_page
+        )
+        self.scroll.horizontalScrollBar().rangeChanged.connect(
+            lambda *_: self._maybe_load_history_page()
+        )
         self.scroll.setFixedHeight(
             int(shelf_theme.get("height", 52)) - int(shelf_padding[1]) - int(shelf_padding[3])
         )
@@ -505,6 +513,14 @@ class MainWindow(QWidget):
                 "pinned": int(bool(pinned)),
             }
 
+        if not _bulk and clip_date == self._history_date_filter:
+            pending_record = self._history_pending_records.pop(content, None)
+            if pending_record is not None:
+                # This clip was copied again while waiting for a later page.
+                # It is already inserted at its new position below, so skip
+                # the stale copy when its old page position is reached.
+                pending_record["_skip_render"] = True
+
         self._clip_dates_by_content[content] = clip_date
         existing_chip = self.chips_by_content.get(content)
         if existing_chip is not None:
@@ -538,6 +554,7 @@ class MainWindow(QWidget):
         self._history_render_generation += 1
         generation = self._history_load_generation
         self._history_records_to_render = []
+        self._history_pending_records = {}
         self._history_render_index = 0
         self._history_bulk_rendering = False
         self._history_live_additions = {}
@@ -561,14 +578,24 @@ class MainWindow(QWidget):
             self._history_live_additions = {}
             self._set_history_loading(False)
             return
-        records_by_content = {record["content"]: record for record in records}
-        records_by_content.update(self._history_live_additions)
+        if self._history_live_additions:
+            records_by_content = {record["content"]: record for record in records}
+            for content, live_record in self._history_live_additions.items():
+                if content in records_by_content:
+                    records_by_content[content] = {
+                        **records_by_content[content],
+                        "index": live_record["index"],
+                    }
+                else:
+                    records_by_content[content] = live_record
+            records = sorted(
+                records_by_content.values(),
+                key=lambda record: (
+                    not bool(record.get("pinned", 0)),
+                    -int(record.get("index") or 0),
+                ),
+            )
         self._history_live_additions = {}
-        records = sorted(
-            records_by_content.values(),
-            key=lambda record: int(record.get("index") or 0),
-            reverse=True,
-        )
         self._show_history_records(records)
 
     def _set_history_loading(self, loading):
@@ -582,8 +609,18 @@ class MainWindow(QWidget):
         generation = self._history_render_generation
         self._clear_history_chip_widgets()
         self._history_records_to_render = list(records)
+        self._history_pending_records = {
+            record["content"]: record for record in self._history_records_to_render
+        }
         self._history_render_index = 0
+        self._history_render_limit = min(
+            len(self._history_records_to_render),
+            ui_config.HISTORY_RENDER_PAGE_SIZE,
+        )
         self._history_bulk_rendering = bool(records)
+        self.scroll.horizontalScrollBar().setValue(
+            self.scroll.horizontalScrollBar().minimum()
+        )
         if not records:
             self._history_bulk_rendering = False
             self.update_empty_state()
@@ -604,12 +641,18 @@ class MainWindow(QWidget):
             return
         batch_end = min(
             self._history_render_index + ui_config.HISTORY_RENDER_BATCH_SIZE,
-            len(self._history_records_to_render),
+            self._history_render_limit,
         )
         while self._history_render_index < batch_end:
             record = self._history_records_to_render[self._history_render_index]
             self._history_render_index += 1
             content = record["content"]
+            self._history_pending_records.pop(content, None)
+            if record.get("_skip_render"):
+                continue
+            latest_copy = self._history_live_additions.pop(content, None)
+            if latest_copy is not None:
+                record = {**record, "index": latest_copy["index"]}
             self.add_clip(
                 content,
                 record["date"],
@@ -617,30 +660,49 @@ class MainWindow(QWidget):
                 pinned=bool(record.get("pinned", 0)),
                 _bulk=True,
             )
-        if self._history_render_index < len(self._history_records_to_render):
+        if self._history_render_index < self._history_render_limit:
             QTimer.singleShot(
                 ui_config.HISTORY_RENDER_INTERVAL_MS,
                 lambda: self._render_history_batch(generation),
             )
             return
 
-        self._history_records_to_render = []
         self._history_bulk_rendering = False
-        chips = sorted(
-            self.chip_widgets(),
-            key=lambda chip: (
-                not bool(getattr(chip, "pinned", False)),
-                -int(chip.clip_index or 0),
-            ),
-        )
-        for chip in chips:
-            self.chip_layout.removeWidget(chip)
-        for index, chip in enumerate(chips):
-            self.chip_layout.insertWidget(index, chip)
-        self.refresh_chip_indexes()
         self.scroll.refresh_edge_fades()
         self.update_empty_state()
         self._set_history_loading(False)
+        if self._history_render_index < len(self._history_records_to_render):
+            self._maybe_load_history_page()
+        else:
+            self._history_records_to_render = []
+            self._history_pending_records = {}
+            self._history_live_additions = {}
+
+    def _maybe_load_history_page(self, *_):
+        if (
+            self._history_loading
+            or self._history_bulk_rendering
+            or self._history_render_index >= len(self._history_records_to_render)
+        ):
+            return
+
+        scrollbar = self.scroll.horizontalScrollBar()
+        near_end = (
+            scrollbar.maximum() == scrollbar.minimum()
+            or scrollbar.maximum() - scrollbar.value()
+            <= max(self.scroll.viewport().width(), 1)
+        )
+        if not near_end:
+            return
+
+        self._history_render_limit = min(
+            len(self._history_records_to_render),
+            self._history_render_index + ui_config.HISTORY_RENDER_PAGE_SIZE,
+        )
+        self._history_bulk_rendering = True
+        self._set_history_loading(True)
+        generation = self._history_render_generation
+        QTimer.singleShot(0, lambda: self._render_history_batch(generation))
 
     @safe_slot("Failed to create clipboard chip")
     def add_chip(self, content, clip_index=None, pinned=False, bulk=False):

@@ -5,7 +5,7 @@ from base64 import b64encode
 from pathlib import Path
 from urllib.parse import urlparse
 
-from PySide6.QtCore import QByteArray, Qt, QUrl, Signal, QPoint, QSize, QRectF, QMimeData, QBuffer, QIODevice, QTimer
+from PySide6.QtCore import QByteArray, Qt, QUrl, Signal, Slot, QPoint, QSize, QRectF, QMimeData, QBuffer, QIODevice, QTimer, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -14,6 +14,7 @@ from PySide6.QtGui import (
     QFontMetrics,
     QIcon,
     QImage,
+    QImageReader,
     QPainter,
     QPainterPath,
     QPen,
@@ -47,6 +48,38 @@ from ui.animations import (
     color_to_rgba,
     parse_color,
 )
+
+
+class ThumbnailLoadSignals(QObject):
+    completed = Signal(object)
+
+
+class ThumbnailLoadTask(QRunnable):
+    """Decode and downsample an image without blocking the GUI thread."""
+
+    def __init__(self, path, size):
+        super().__init__()
+        self.path = str(path)
+        self.size = QSize(size)
+        self.signals = ThumbnailLoadSignals()
+
+    def run(self):
+        try:
+            image = QImageReader(self.path).read()
+            if image.isNull():
+                self.signals.completed.emit(None)
+                return
+            width, height = self.size.width(), self.size.height()
+            image = image.scaled(
+                width, height,
+                Qt.KeepAspectRatioByExpanding,
+                Qt.SmoothTransformation,
+            )
+            left = max(0, (image.width() - width) // 2)
+            top = max(0, (image.height() - height) // 2)
+            self.signals.completed.emit(image.copy(left, top, width, height))
+        except Exception:
+            self.signals.completed.emit(None)
 
 
 class ChipContextMenu(QMenu):
@@ -174,6 +207,8 @@ class ChipWidget(QWidget):
         self._deferred_click_timer.setInterval(QApplication.doubleClickInterval() + 50)
         self._deferred_click_timer.timeout.connect(lambda: self.paste_requested.emit(self.content))
         self._favicon_pixmap = QPixmap()
+        self._thumbnail_image = None
+        self._thumbnail_task = None
         self.setObjectName("chip")
 
         chip_theme = self.theme.get("chip", {})
@@ -515,18 +550,27 @@ class ChipWidget(QWidget):
         return content.replace("\n", " ")
 
     def set_image_thumb(self):
-        pixmap = QPixmap(self.content)
-        if pixmap.isNull():
-            self.icon.setText("I")
-            return
-
         chip_theme = self.theme.get("chip", {})
         thumbnail = chip_theme.get("thumbnail", {})
         thumb_size = QSize(
             int(thumbnail.get("width", 26)),
             int(thumbnail.get("height", 22)),
         )
-        scaled = pixmap.scaled(thumb_size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        self.icon.setFixedSize(thumb_size)
+        if self._thumbnail_image is None:
+            self.icon.setText("I")
+            if self._thumbnail_task is None:
+                task = ThumbnailLoadTask(self.content, thumb_size)
+                task.signals.completed.connect(self._on_thumbnail_loaded)
+                self._thumbnail_task = task
+                QThreadPool.globalInstance().start(task)
+            return
+
+        scaled = QPixmap.fromImage(self._thumbnail_image).scaled(
+            thumb_size,
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation,
+        )
         rounded = QPixmap(thumb_size)
         rounded.fill(Qt.transparent)
 
@@ -545,8 +589,16 @@ class ChipWidget(QWidget):
         painter.drawPixmap(0, 0, scaled)
         painter.end()
 
-        self.icon.setFixedSize(thumb_size)
         self.icon.setPixmap(rounded)
+
+    @Slot(object)
+    def _on_thumbnail_loaded(self, image):
+        self._thumbnail_task = None
+        if image is None or image.isNull():
+            self.icon.setText("I")
+            return
+        self._thumbnail_image = image
+        self.set_image_thumb()
 
     def domain(self):
         return urlparse(self.content).netloc.removeprefix("www.").lower()

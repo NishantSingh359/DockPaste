@@ -371,7 +371,7 @@ class ClipboardDatabase:
                 SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE date = ?
-                ORDER BY "index" DESC
+                ORDER BY pinned DESC, "index" DESC
                 """,
                 (clip_date,),
             ).fetchall()

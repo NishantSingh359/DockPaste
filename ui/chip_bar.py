@@ -1,4 +1,5 @@
 import math
+from bisect import bisect_left
 
 from PySide6.QtCore import Qt, QEvent, QPoint, QPropertyAnimation, QEasingCurve, Property, QTimer
 from PySide6.QtGui import QCursor
@@ -47,6 +48,7 @@ class ChipBar(QScrollArea):
         self.horizontalScrollBar().rangeChanged.connect(self._refresh_chip_hover)
         self._scroll_animation.finished.connect(self._refresh_chip_hover)
         self._edge_fade_update_pending = False
+        self._chip_geometry_cache = None
 
         self._update_viewport_mask()
 
@@ -123,6 +125,7 @@ class ChipBar(QScrollArea):
     def setWidget(self, widget):
         super().setWidget(widget)
         widget.installEventFilter(self)
+        self._chip_geometry_cache = None
         self._schedule_edge_fade_update()
 
     @Property(float)
@@ -144,7 +147,14 @@ class ChipBar(QScrollArea):
         self.refresh_edge_fades()
 
     def eventFilter(self, watched, event):
-        if watched is self.widget() and event.type() == QEvent.ChildAdded:
+        if watched is self.widget() and event.type() in (QEvent.ChildAdded, QEvent.ChildRemoved):
+            self._chip_geometry_cache = None
+            self._schedule_edge_fade_update()
+        elif callable(getattr(watched, "set_hovered", None)) and event.type() in (
+            QEvent.Move,
+            QEvent.Resize,
+        ):
+            self._chip_geometry_cache = None
             self._schedule_edge_fade_update()
         elif event.type() in (QEvent.Move, QEvent.Resize, QEvent.Show, QEvent.Hide):
             self._schedule_edge_fade_update()
@@ -173,10 +183,7 @@ class ChipBar(QScrollArea):
         fade_right = self._edge_fade_enabled and scroll_value < scrollbar.maximum()
         if not self._edge_fade_enabled:
             fade_width = 0
-        for chip in content_widget.findChildren(QWidget):
-            if not callable(getattr(chip, "set_hovered", None)):
-                continue
-
+        for chip in self._visible_chips(content_widget):
             effect = chip.graphicsEffect()
             if not isinstance(effect, EdgeFadeOpacityEffect):
                 effect = EdgeFadeOpacityEffect(chip)
@@ -214,10 +221,47 @@ class ChipBar(QScrollArea):
         viewport_position = self.viewport().mapFromGlobal(cursor_position)
         cursor_in_viewport = self.viewport().rect().contains(viewport_position)
         self._apply_chip_hover(
-            content_widget.findChildren(QWidget),
+            self._visible_chips(content_widget),
             cursor_position,
             cursor_in_viewport,
         )
+
+    def _visible_chips(self, content_widget=None):
+        """Return only shelf chips intersecting the viewport.
+
+        The content widget contains direct chip children. Searching every
+        descendant and updating every chip on each scroll frame made scrolling
+        progressively more expensive as history grew.
+        """
+        content_widget = content_widget or self.widget()
+        if content_widget is None:
+            return []
+        if self._chip_geometry_cache is None:
+            chips = [
+                child
+                for child in content_widget.children()
+                if isinstance(child, QWidget)
+                and callable(getattr(child, "set_hovered", None))
+            ]
+            chips.sort(key=lambda chip: chip.pos().x())
+            for chip in chips:
+                chip.installEventFilter(self)
+            left_edges = [chip.pos().x() for chip in chips]
+            right_edges = [chip.pos().x() + chip.width() for chip in chips]
+            self._chip_geometry_cache = (chips, left_edges, right_edges)
+
+        chips, left_edges, right_edges = self._chip_geometry_cache
+        viewport_left = self.horizontalScrollBar().value()
+        viewport_right = viewport_left + self.viewport().width()
+        first = bisect_left(right_edges, viewport_left)
+        visible = []
+        for index in range(first, len(chips)):
+            if left_edges[index] > viewport_right:
+                break
+            chip = chips[index]
+            if chip.isVisible():
+                visible.append(chip)
+        return visible
 
     def _apply_chip_hover(self, chips, cursor_position, cursor_in_viewport):
         for chip in chips:
