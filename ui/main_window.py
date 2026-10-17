@@ -18,6 +18,10 @@ from PySide6.QtCore import (
     QParallelAnimationGroup,
     QEasingCurve,
     QSize,
+    QObject,
+    QRunnable,
+    QThreadPool,
+    Signal,
     Slot,
 )
 from PySide6.QtGui import (
@@ -105,6 +109,28 @@ from config import (
 )
 from utils.app_logging import log_exception, safe_slot
 from utils.app_icon import create_app_icon
+
+
+class HistoryLoadSignals(QObject):
+    completed = Signal(int, str, object, str)
+
+
+class HistoryLoadTask(QRunnable):
+    """Read one date's clip records away from the GUI thread."""
+
+    def __init__(self, database, generation, clip_date):
+        super().__init__()
+        self.database = database
+        self.generation = generation
+        self.clip_date = clip_date
+        self.signals = HistoryLoadSignals()
+
+    def run(self):
+        try:
+            records = self.database.get_by_date(self.clip_date)
+            self.signals.completed.emit(self.generation, self.clip_date, records, "")
+        except Exception as exc:
+            self.signals.completed.emit(self.generation, self.clip_date, None, str(exc))
 
 
 class ShelfContainer(QWidget):
@@ -226,6 +252,16 @@ class MainWindow(QWidget):
         self.last_target_window = None
         self.chips_by_content = {}
         self._clip_dates_by_content = {}
+        self._history_load_generation = 0
+        self._history_render_generation = 0
+        self._history_load_tasks = {}
+        self._history_live_additions = {}
+        self._history_records_to_render = []
+        self._history_render_index = 0
+        self._history_loading = False
+        self._history_bulk_rendering = False
+        self._history_load_pool = QThreadPool(self)
+        self._history_load_pool.setMaxThreadCount(1)
         self.is_shelf_pinned = False
         self._is_hiding = False
         self._hotkey_was_down = False
@@ -310,13 +346,6 @@ class MainWindow(QWidget):
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
 
         self.setup_ui()
-        try:
-            today_history = self.clipboard_manager.get_db().get_by_date(
-                self._history_date_filter
-            )
-            self._show_history_records(today_history)
-        except Exception:
-            log_exception("Failed to restore clipboard history")
         self.update_screen_geometry()
         self.move(self.hidden_pos)
         self.refresh_chip_indexes()
@@ -343,6 +372,7 @@ class MainWindow(QWidget):
         self.history_retention_timer.start(24 * 60 * 60 * 1000)
 
         self._apply_theme(self.theme_name)
+        QTimer.singleShot(0, lambda: self._request_history_load(self._history_date_filter))
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -435,6 +465,7 @@ class MainWindow(QWidget):
         self.chip_layout.addWidget(self.empty_state_widget)
         self.chip_layout.addStretch()
         self.update_empty_state()
+
         self.update_mask()
 
     def resizeEvent(self, event):
@@ -446,7 +477,7 @@ class MainWindow(QWidget):
         self.clearMask()
 
     @safe_slot("Failed to add clipboard chip")
-    def add_clip(self, content, clip_date=None, clip_index=None, pinned=False):
+    def add_clip(self, content, clip_date=None, clip_index=None, pinned=False, _bulk=False):
         clip_date = clip_date or date.today().isoformat()
         if (
             self._history_date_filter is not None
@@ -462,6 +493,18 @@ class MainWindow(QWidget):
             except Exception:
                 log_exception("Failed to retrieve clipboard index")
 
+        if (
+            self._history_loading
+            and not _bulk
+            and clip_date == self._history_date_filter
+        ):
+            self._history_live_additions[content] = {
+                "content": content,
+                "date": clip_date,
+                "index": clip_index,
+                "pinned": int(bool(pinned)),
+            }
+
         self._clip_dates_by_content[content] = clip_date
         existing_chip = self.chips_by_content.get(content)
         if existing_chip is not None:
@@ -470,49 +513,142 @@ class MainWindow(QWidget):
                     clip_index,
                     show_index=self.clip_indexing_enabled,
                 )
-                # Resurfacing a duplicate renumbers every clip for that day.
-                # Refresh all cached indexes before sorting; otherwise the
-                # shelf can compare the new index against stale sibling indexes.
-                self._refresh_clip_indexes_for_date(clip_date)
-                self._reorder_chip(existing_chip)
-                self.scroll.horizontalScrollBar().setValue(
-                    self.scroll.horizontalScrollBar().minimum()
-                )
+                if not _bulk:
+                    # Resurfacing a duplicate renumbers every clip for that day.
+                    # Refresh all cached indexes before sorting; otherwise the
+                    # shelf can compare the new index against stale sibling indexes.
+                    self._refresh_clip_indexes_for_date(clip_date)
+                    self._reorder_chip(existing_chip)
+                    self.scroll.horizontalScrollBar().setValue(
+                        self.scroll.horizontalScrollBar().minimum()
+                    )
             return
-        self.add_chip(content, clip_index, pinned=pinned)
+        self.add_chip(content, clip_index, pinned=pinned, bulk=_bulk)
 
     def set_history_date_filter(self, clip_date):
         clip_date = clip_date or date.today().isoformat()
-        try:
-            database = self.clipboard_manager.get_db()
-            records = database.get_by_date(clip_date)
-        except Exception:
-            log_exception("Failed to load clipboard history for selected date")
+        if clip_date == self._history_date_filter:
             return
+        self._request_history_load(clip_date)
+
+    def _request_history_load(self, clip_date):
+        clip_date = clip_date or date.today().isoformat()
         self._history_date_filter = clip_date
+        self._history_load_generation += 1
+        self._history_render_generation += 1
+        generation = self._history_load_generation
+        self._history_records_to_render = []
+        self._history_render_index = 0
+        self._history_bulk_rendering = False
+        self._history_live_additions = {}
+        self._set_history_loading(True)
+        self._clear_history_chip_widgets()
+        task = HistoryLoadTask(
+            self.clipboard_manager.get_db(), generation, clip_date
+        )
+        task.signals.completed.connect(self._on_history_records_loaded)
+        self._history_load_tasks[generation] = task
+        self._history_load_pool.start(task)
+
+    @Slot(int, str, object, str)
+    def _on_history_records_loaded(self, generation, clip_date, records, error):
+        self._history_load_tasks.pop(generation, None)
+        if generation != self._history_load_generation:
+            return
+        if error:
+            log_exception(f"Failed to load clipboard history for {clip_date}: {error}")
+            self._history_bulk_rendering = False
+            self._history_live_additions = {}
+            self._set_history_loading(False)
+            return
+        records_by_content = {record["content"]: record for record in records}
+        records_by_content.update(self._history_live_additions)
+        self._history_live_additions = {}
+        records = sorted(
+            records_by_content.values(),
+            key=lambda record: int(record.get("index") or 0),
+            reverse=True,
+        )
         self._show_history_records(records)
 
+    def _set_history_loading(self, loading):
+        self._history_loading = bool(loading)
+        self.update_empty_state()
+        if self._settings_dialog is not None:
+            self._settings_dialog.set_history_loading(self._history_loading)
+
     def _show_history_records(self, records):
+        self._history_render_generation += 1
+        generation = self._history_render_generation
+        self._clear_history_chip_widgets()
+        self._history_records_to_render = list(records)
+        self._history_render_index = 0
+        self._history_bulk_rendering = bool(records)
+        if not records:
+            self._history_bulk_rendering = False
+            self.update_empty_state()
+            self._set_history_loading(False)
+            return
+        self._set_history_loading(True)
+        QTimer.singleShot(0, lambda: self._render_history_batch(generation))
+
+    def _clear_history_chip_widgets(self):
         chips = list(self.chips_by_content.values())
         self.chips_by_content.clear()
         self._clip_dates_by_content.clear()
         self._remove_chip_widgets(chips)
         self._next_chip_number = 1
-        for record in records:
+
+    def _render_history_batch(self, generation):
+        if generation != self._history_render_generation:
+            return
+        batch_end = min(
+            self._history_render_index + ui_config.HISTORY_RENDER_BATCH_SIZE,
+            len(self._history_records_to_render),
+        )
+        while self._history_render_index < batch_end:
+            record = self._history_records_to_render[self._history_render_index]
+            self._history_render_index += 1
             content = record["content"]
             self.add_clip(
                 content,
                 record["date"],
                 record["index"],
                 pinned=bool(record.get("pinned", 0)),
+                _bulk=True,
             )
+        if self._history_render_index < len(self._history_records_to_render):
+            QTimer.singleShot(
+                ui_config.HISTORY_RENDER_INTERVAL_MS,
+                lambda: self._render_history_batch(generation),
+            )
+            return
+
+        self._history_records_to_render = []
+        self._history_bulk_rendering = False
+        chips = sorted(
+            self.chip_widgets(),
+            key=lambda chip: (
+                not bool(getattr(chip, "pinned", False)),
+                -int(chip.clip_index or 0),
+            ),
+        )
+        for chip in chips:
+            self.chip_layout.removeWidget(chip)
+        for index, chip in enumerate(chips):
+            self.chip_layout.insertWidget(index, chip)
+        self.refresh_chip_indexes()
+        self.scroll.refresh_edge_fades()
+        self.update_empty_state()
+        self._set_history_loading(False)
 
     @safe_slot("Failed to create clipboard chip")
-    def add_chip(self, content, clip_index=None, pinned=False):
+    def add_chip(self, content, clip_index=None, pinned=False, bulk=False):
         if content in self.chips_by_content:
             return
 
-        self._finish_chip_position_animation()
+        if not bulk:
+            self._finish_chip_position_animation()
         chip = ChipWidget(
             content,
             self.chip_min_width,
@@ -534,19 +670,23 @@ class MainWindow(QWidget):
         chip.clear_all_requested.connect(self.clear_unpinned_clips)
         chip.context_action_triggered.connect(self.keep_shelf_open_after_context_action)
         self.chips_by_content[content] = chip
-        self.update_empty_state()
-        self.insert_chip(chip)
-        self.refresh_chip_indexes()
+        if bulk:
+            self.chip_layout.insertWidget(max(0, self.chip_layout.count() - 1), chip)
+        else:
+            self.update_empty_state()
+            self.insert_chip(chip)
+            self.refresh_chip_indexes()
         chip.show()
-        self.scroll.refresh_edge_fades()
-        chip._entry_fade_animation = fade(
-            chip,
-            0.0,
-            1.0,
-            CHIP_LAYOUT_ANIMATION_MS,
-            finished=lambda: self._finish_chip_fade_in(chip),
-        )
-        self.trim_chips()
+        if not bulk:
+            self.scroll.refresh_edge_fades()
+            chip._entry_fade_animation = fade(
+                chip,
+                0.0,
+                1.0,
+                CHIP_LAYOUT_ANIMATION_MS,
+                finished=lambda: self._finish_chip_fade_in(chip),
+            )
+            self.trim_chips()
 
     def add_clips(self, contents):
         for content in contents:
@@ -606,6 +746,9 @@ class MainWindow(QWidget):
 
     def update_empty_state(self):
         if hasattr(self, "empty_label"):
+            if self._history_loading:
+                self.empty_state_widget.hide()
+                return
             has_chip_widgets = False
             for index in range(self.chip_layout.count()):
                 item = self.chip_layout.itemAt(index)
@@ -1302,6 +1445,7 @@ class MainWindow(QWidget):
             ),
             selected_history_date=self._history_date_filter,
             history_retention_days=self.history_retention_days,
+            history_loading=self._history_loading,
             theme_name=self.theme_name,
             available_themes=self.theme_manager.available_themes(),
             theme_previews={
@@ -1346,7 +1490,12 @@ class MainWindow(QWidget):
         database.clear()
         self.clipboard_manager.image_store.clear_thumbnails()
 
+        self._history_load_generation += 1
+        self._history_render_generation += 1
+        self._history_records_to_render = []
+        self._history_bulk_rendering = False
         self._history_date_filter = date.today().isoformat()
+        self._set_history_loading(False)
         self._show_history_records([])
         if hasattr(self, "empty_state_widget"):
             self.empty_state_widget.setVisible(True)
@@ -1566,6 +1715,7 @@ class MainWindow(QWidget):
         # before animating it into view.
         self.show()
         self.raise_()
+        self._set_history_loading(self._history_loading)
 
         if SHELF_CHIP_REVEAL_ENABLED:
             self.reveal_chips()
@@ -1580,6 +1730,7 @@ class MainWindow(QWidget):
             fade(popup, 1.0, 0.0, CHIP_CONTEXT_MENU_FADE_OUT_MS, finished=popup.close)
 
         self.is_open = False
+        self._set_history_loading(self._history_loading)
         self._is_hiding = True
         if self.hide_reset_timer.isActive():
             self.hide_reset_timer.stop()

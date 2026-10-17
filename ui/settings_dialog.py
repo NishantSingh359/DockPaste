@@ -37,6 +37,7 @@ from config import (
 )
 from animation_config import CHIP_SCROLL_SPEED_MIN, CHIP_SCROLL_SPEED_MAX
 import ui_config as appearance
+from ui.loading_ripple import LoadingRipple
 
 
 class SettingsNavRow(QWidget):
@@ -337,6 +338,7 @@ class SettingsDialog(QDialog):
         history_dates,
         selected_history_date,
         history_retention_days,
+        history_loading=False,
         theme,
         on_show_on_hover,
         on_hide_on_paste,
@@ -596,6 +598,18 @@ class SettingsDialog(QDialog):
             "Permanently delete every saved clip and stored image.",
             self.clear_history_button,
         )
+        self.history_loading_status = QWidget()
+        loading_layout = QHBoxLayout(self.history_loading_status)
+        loading_layout.setContentsMargins(4, 4, 0, 4)
+        loading_layout.setSpacing(10)
+        self.history_loading_ripple = LoadingRipple(self._theme_palette["accent"], 28)
+        loading_label = QLabel("Loading clips…")
+        loading_label.setObjectName("settingDescription")
+        loading_layout.addWidget(self.history_loading_ripple)
+        loading_layout.addWidget(loading_label)
+        loading_layout.addStretch(1)
+        history.layout().addWidget(self.history_loading_status)
+        self.set_history_loading(history_loading)
         self._add_page(history)
 
         support = self._new_page("Support", "Support DockPaste and help the project grow.")
@@ -879,6 +893,8 @@ class SettingsDialog(QDialog):
             switch._disabled_thumb_color = QColor(p["disabled_thumb"])
         for combo in self.findChildren(MacComboBox):
             combo.set_theme_colors(p)
+        if hasattr(self, "history_loading_ripple"):
+            self.history_loading_ripple.set_color(p["accent"])
         selected_theme = (theme or {}).get("name")
         for theme_id, button in self._theme_buttons.items():
             button.set_palette(p, self._theme_previews.get(theme_id, {}))
@@ -887,6 +903,10 @@ class SettingsDialog(QDialog):
             button.set_palette(p)
         self.setWindowTitle(appearance.WINDOW_TITLE)
         self.setStyleSheet(appearance.settings_stylesheet(p))
+
+    def set_history_loading(self, loading):
+        if hasattr(self, "history_loading_status"):
+            self.history_loading_status.setVisible(bool(loading))
 
     def _select_accent_color(self, color, callback):
         self._accent_color = color
