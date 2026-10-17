@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray, QUrl
-from PySide6.QtGui import QDesktopServices, QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import QDesktopServices, QColor, QFont, QFontDatabase, QIcon, QLinearGradient, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from config import (
+    APP_NAME,
+    APP_VERSION,
     CHIP_WIDTH_MAX_LIMIT,
     CHIP_WIDTH_MIN_LIMIT,
     CLIPBOARD_HISTORY_RETENTION_MAX_DAYS,
@@ -383,6 +385,7 @@ class SettingsDialog(QDialog):
             ("appearance", "Appearance"),
             ("history", "History"),
             ("support", "Support"),
+            ("about", "About"),
         ):
             self._add_nav_item(icon_name, page_name)
         self.sidebar.currentRowChanged.connect(self._on_nav_changed)
@@ -601,6 +604,67 @@ class SettingsDialog(QDialog):
             self._add_control_row(support_card, title, description, link_button)
         self._add_page(support)
 
+        about = self._new_page("About", "App information and project details.")
+        about_card = self._card(about)
+        about_header = QWidget()
+        about_header_layout = QHBoxLayout(about_header)
+        about_header_layout.setContentsMargins(0, 4, 0, 4)
+        about_header_layout.setSpacing(18)
+        app_icon = QLabel()
+        app_icon.setObjectName("aboutAppIcon")
+        app_icon.setFixedSize(70, 70)
+        app_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        app_icon.setPixmap(QIcon(str(appearance.APP_ICON_FILE)).pixmap(52, 52))
+        about_title_column = QVBoxLayout()
+        about_title_column.setContentsMargins(0, 0, 0, 0)
+        about_title_column.setSpacing(6)
+        app_name_label = QLabel(APP_NAME)
+        app_name_label.setObjectName("aboutAppName")
+        version_label = QLabel(f"Version {APP_VERSION}")
+        version_label.setObjectName("aboutVersionBadge")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version_label.setFixedWidth(104)
+        about_title_column.addWidget(app_name_label)
+        about_title_column.addWidget(version_label, 0, Qt.AlignmentFlag.AlignLeft)
+        about_header_layout.addWidget(app_icon, 0, Qt.AlignmentFlag.AlignTop)
+        about_header_layout.addLayout(about_title_column, 1)
+        about_card.layout().addWidget(about_header)
+
+        description_label = QLabel(
+            "Keep recent text, links, files, and images close at hand. DockPaste stores your clipboard history locally so you can quickly find and reuse what you copied."
+        )
+        description_label.setObjectName("settingDescription")
+        description_label.setWordWrap(True)
+        about_card.layout().addWidget(description_label)
+
+        details_card = self._card(about)
+        self._add_control_row(
+            details_card,
+            "Platform",
+            "Designed for Windows desktop.",
+            self._about_fact_value("Windows 10 / 11"),
+        )
+        self._add_control_row(
+            details_card,
+            "Your Data",
+            "Clipboard history and settings stay on this device.",
+            self._about_fact_value("Stored locally"),
+        )
+        source_button = QPushButton("View on GitHub")
+        source_button.setObjectName("supportLinkButton")
+        source_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        source_button.setAccessibleName("View DockPaste source on GitHub")
+        source_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://github.com/NishantSingh359/DockPaste"))
+        )
+        self._add_control_row(
+            details_card,
+            "Open Source",
+            "Browse the code, report an issue, or help improve DockPaste.",
+            source_button,
+        )
+        self._add_page(about)
+
         self.set_theme(theme)
         self.setMaximumSize(*appearance.WINDOW_MAX_SIZE)
         primary_screen = QApplication.primaryScreen()
@@ -765,6 +829,13 @@ class SettingsDialog(QDialog):
         spin.setSuffix(suffix)
         spin.setValue(value)
         return spin
+
+    @staticmethod
+    def _about_fact_value(text):
+        value = QLabel(text)
+        value.setObjectName("aboutFactValue")
+        value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        return value
 
     def set_theme(self, theme):
         # Settings share the active theme's colors while keeping their own layout.

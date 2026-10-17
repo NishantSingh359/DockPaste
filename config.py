@@ -8,6 +8,7 @@ from ui_config import CHIP as UI_CHIP, SHELF as UI_SHELF
 # -----------------------------------------------------------------------------
 
 APP_NAME = "DockPaste"
+APP_VERSION = "1.6"
 BASE_DIR = Path(__file__).resolve().parent
 APP_STORAGE_ROOT = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or BASE_DIR)
 APP_STORAGE_DIR = APP_STORAGE_ROOT / APP_NAME

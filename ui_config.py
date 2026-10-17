@@ -18,6 +18,7 @@ ROOT_SPACING = 12
 FONT_FAMILY = "Inter"
 _BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 FONT_FILE = _BUNDLE_ROOT / "assets" / "fonts" / "Inter-Variable.ttf"
+APP_ICON_FILE = _BUNDLE_ROOT / "assets" / "app_icons" / "DockPaste.ico"
 
 # Shared text metrics.
 FONT = {
@@ -141,6 +142,10 @@ NAV_ICON_PATHS = {
     ),
     "support": (
         '<path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8A4.3 4.3 0 0 1 11 6.1l1 1.1 1-1.1a4.3 4.3 0 0 1 7.8 2.7z"/>'
+    ),
+    "about": (
+        '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/>'
+        '<path d="M12 8h.01" stroke-width="3"/>'
     ),
 }
 
@@ -359,6 +364,10 @@ def settings_stylesheet(palette):
         QLabel#pageHeading {{ color: {p['text']}; font-size: {f['page_title_size']}px; font-weight: {f['page_title_weight']}; }}
         QLabel#pageSubtitle {{ color: {p['secondary_text']}; font-size: {f['page_subtitle_size']}px; font-weight: {f['page_subtitle_weight']}; padding-bottom: {SUBTITLE_BOTTOM_PADDING}px; }}
         QLabel#appearanceSectionTitle {{ color: {p['text']}; font-size: {THEME_PICKER['section_title_size']}px; font-weight: {THEME_PICKER['section_title_weight']}; }}
+        QLabel#aboutAppName {{ color: {p['text']}; font-size: 28px; font-weight: 700; }}
+        QLabel#aboutAppIcon {{ background: {p['control_background']}; border: {SETTINGS_CARD_BORDER_WIDTH}px solid {p['border']}; border-radius: 16px; }}
+        QLabel#aboutVersionBadge {{ color: {p['accent']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['control_border']}; border-radius: 10px; padding: 5px 10px; font-size: {f['dialog_size']}px; font-weight: 600; }}
+        QLabel#aboutFactValue {{ color: {p['text']}; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
         QFrame#settingsCard {{ background: {p['surface']}; border: {SETTINGS_CARD_BORDER_WIDTH}px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
         QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
