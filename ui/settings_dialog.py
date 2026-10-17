@@ -30,8 +30,6 @@ from config import (
     CHIP_WIDTH_MIN_LIMIT,
     CLIPBOARD_HISTORY_RETENTION_MAX_DAYS,
     CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
-    MAX_CHIPS_MIN,
-    MAX_CHIPS_MAX,
     SHELF_WIDTH_RATIO_MAX,
     SHELF_WIDTH_RATIO_MIN,
 )
@@ -328,7 +326,6 @@ class SettingsDialog(QDialog):
         start_with_windows,
         chip_min_width,
         chip_max_width,
-        max_chips,
         shelf_width_ratio,
         theme_name,
         available_themes,
@@ -354,7 +351,6 @@ class SettingsDialog(QDialog):
         on_start_with_windows,
         on_chip_min_width,
         on_chip_max_width,
-        on_max_chips,
         on_shelf_width_ratio,
         on_history_date,
         on_history_retention_days,
@@ -554,9 +550,6 @@ class SettingsDialog(QDialog):
         self.chip_max_width = self._spin(chip_max_width, CHIP_WIDTH_MIN_LIMIT, CHIP_WIDTH_MAX_LIMIT, " px")
         self.chip_max_width.valueChanged.connect(on_chip_max_width)
         self._add_control_row(sizing_card, "Maximum Clip Width", "Longest width used before clip text is shortened.", self.chip_max_width)
-        self.max_chips = self._spin(max_chips, MAX_CHIPS_MIN, MAX_CHIPS_MAX)
-        self.max_chips.valueChanged.connect(on_max_chips)
-        self._add_control_row(sizing_card, "Maximum Clips", "Maximum number of visible clips in the shelf.", self.max_chips)
         self.shelf_width_ratio = SettingsDoubleSpinBox()
         self.shelf_width_ratio.setRange(SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX)
         self.shelf_width_ratio.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)

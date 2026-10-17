@@ -12,7 +12,6 @@ from config import (
     CHIP_WIDTH_MAX_LIMIT,
     CHIP_WIDTH_MIN_LIMIT,
     COLOR_PREVIEW_ENABLED,
-    MAX_CHIPS,
     SETTINGS_WINDOW_MIN_WIDTH,
     SHELF_WIDTH_RATIO_MAX,
     SHELF_WIDTH_RATIO_MIN,
@@ -48,7 +47,6 @@ class TestThemeManager(unittest.TestCase):
 
         self.assertNotIn("min_width", chip_theme)
         self.assertNotIn("max_width", chip_theme)
-        self.assertNotIn("max_chips", chip_theme)
         self.assertNotIn("color_preview_enabled", chip_theme)
         self.assertNotIn("settings", theme)
 
@@ -68,7 +66,6 @@ class TestThemeManager(unittest.TestCase):
         self.assertEqual(CHIP_MAX_WIDTH, 350)
         self.assertEqual(CHIP_WIDTH_MIN_LIMIT, 100)
         self.assertEqual(CHIP_WIDTH_MAX_LIMIT, 500)
-        self.assertEqual(MAX_CHIPS, 100)
         self.assertTrue(COLOR_PREVIEW_ENABLED)
         self.assertEqual(SETTINGS_WINDOW_MIN_WIDTH, 320)
         self.assertEqual(SHELF_WIDTH_RATIO_MIN, 0.50)

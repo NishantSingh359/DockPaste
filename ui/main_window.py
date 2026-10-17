@@ -91,13 +91,10 @@ from config import (
     CHIP_MAX_WIDTH,
     CHIP_WIDTH_MIN_LIMIT,
     CHIP_WIDTH_MAX_LIMIT,
-    MAX_CHIPS_MIN,
-    MAX_CHIPS_MAX,
     COLOR_PREVIEW_ENABLED,
     HIDE_DISTANCE,
     HOVER_TRIGGER_HEIGHT,
     HOVER_TRIGGER_WIDTH,
-    MAX_CHIPS,
     MOUSE_POLL_MS,
     SHELF_SHOW_ON_HOVER,
     HIDE_ON_PASTE,
@@ -289,7 +286,6 @@ class MainWindow(QWidget):
         self.start_with_windows_enabled = False
         self.chip_min_width = CHIP_MIN_WIDTH
         self.chip_max_width = CHIP_MAX_WIDTH
-        self.max_chips = MAX_CHIPS
         self.history_retention_days = CLIPBOARD_HISTORY_RETENTION_DAYS
         self._history_date_filter = date.today().isoformat()
         shelf_theme = self.theme.get("shelf", {})
@@ -748,7 +744,6 @@ class MainWindow(QWidget):
                 CHIP_LAYOUT_ANIMATION_MS,
                 finished=lambda: self._finish_chip_fade_in(chip),
             )
-            self.trim_chips()
 
     def add_clips(self, contents):
         for content in contents:
@@ -1049,34 +1044,6 @@ class MainWindow(QWidget):
             self.clipboard_manager.set_image_for_paste(content, temporary=False)
         else:
             self.clipboard_manager.set_text_for_paste(content, temporary=False)
-
-    @safe_slot("Failed to trim chips")
-    def trim_chips(self):
-        if self._history_date_filter is not None:
-            return
-        chips_to_remove = []
-        while len(self.chips_by_content) > self.max_chips:
-            chip = self.oldest_unpinned_chip()
-            if chip is None:
-                break
-            self.chips_by_content.pop(chip.content, None)
-            chips_to_remove.append(chip)
-        self._remove_chip_widgets(chips_to_remove)
-
-    def oldest_unpinned_chip(self):
-        for index in range(self.chip_layout.count() - 2, -1, -1):
-            item = self.chip_layout.itemAt(index)
-            if not item:
-                continue
-            chip = item.widget()
-            if (
-                chip
-                and chip is not getattr(self, "empty_state_widget", None)
-                and not getattr(chip, "pinned", False)
-                and not getattr(chip, "_is_deleting", False)
-            ):
-                return chip
-        return None
 
     @safe_slot("Failed to process drag enter")
     def dragEnterEvent(self, event):
@@ -1381,10 +1348,6 @@ class MainWindow(QWidget):
                 saved_accent if saved_accent in {value.upper() for value in accent_options}
                 else (accent_options[0] if accent_options else self.theme["settings"]["accent"])
             )
-            self.max_chips = max(
-                MAX_CHIPS_MIN,
-                min(MAX_CHIPS_MAX, int(settings.get("max_chips", self.max_chips))),
-            )
             self.history_retention_days = max(
                 CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
                 min(
@@ -1435,7 +1398,6 @@ class MainWindow(QWidget):
                         "start_with_windows_enabled": self.start_with_windows_enabled,
                         "chip_min_width": self.chip_min_width,
                         "chip_max_width": self.chip_max_width,
-                        "max_chips": self.max_chips,
                         "history_retention_days": self.history_retention_days,
                         "shelf_width_ratio": self.shelf_width_ratio,
                         "theme": self.theme_name,
@@ -1498,7 +1460,6 @@ class MainWindow(QWidget):
             start_with_windows=self.start_with_windows_enabled,
             chip_min_width=self.chip_min_width,
             chip_max_width=self.chip_max_width,
-            max_chips=self.max_chips,
             shelf_width_ratio=self.shelf_width_ratio,
             history_dates=sorted(
                 set(self.clipboard_manager.get_db().get_available_dates())
@@ -1534,7 +1495,6 @@ class MainWindow(QWidget):
             on_start_with_windows=self.set_start_with_windows_enabled,
             on_chip_min_width=self.set_chip_min_width,
             on_chip_max_width=self.set_chip_max_width,
-            on_max_chips=self.set_max_chips,
             on_shelf_width_ratio=self.set_shelf_width_ratio,
             on_history_date=self.set_history_date_filter,
             on_history_retention_days=self.set_history_retention_days,
@@ -1569,11 +1529,6 @@ class MainWindow(QWidget):
             combo.addItem(self._history_date_filter, self._history_date_filter)
             combo.setCurrentIndex(0)
             combo.blockSignals(False)
-
-    def set_max_chips(self, max_chips):
-        self.max_chips = max(MAX_CHIPS_MIN, min(MAX_CHIPS_MAX, int(max_chips)))
-        self.trim_chips()
-        self._save_context_menu_settings()
 
     def set_history_retention_days(self, days):
         self.history_retention_days = max(
