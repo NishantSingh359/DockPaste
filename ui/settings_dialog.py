@@ -289,6 +289,26 @@ class AccentColorButton(QPushButton):
         painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._label)
 
 
+class SettingsSpinBox(QSpinBox):
+    """Let the settings page scroll on wheel input unless editing this value."""
+
+    def wheelEvent(self, event):
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
+class SettingsDoubleSpinBox(QDoubleSpinBox):
+    """Avoid changing numeric settings accidentally while scrolling the page."""
+
+    def wheelEvent(self, event):
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -369,6 +389,8 @@ class SettingsDialog(QDialog):
         self.sidebar.setFrameShape(QFrame.NoFrame)
         self.sidebar.setFocusPolicy(Qt.NoFocus)
         self.sidebar.setUniformItemSizes(True)
+        self.sidebar.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.sidebar.verticalScrollBar().setSingleStep(appearance.SETTINGS_SCROLL_STEP)
         self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sidebar.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.pages = QStackedWidget()
@@ -533,7 +555,7 @@ class SettingsDialog(QDialog):
         self.max_chips = self._spin(max_chips, MAX_CHIPS_MIN, MAX_CHIPS_MAX)
         self.max_chips.valueChanged.connect(on_max_chips)
         self._add_control_row(sizing_card, "Maximum Clips", "Maximum number of visible clips in the shelf.", self.max_chips)
-        self.shelf_width_ratio = QDoubleSpinBox()
+        self.shelf_width_ratio = SettingsDoubleSpinBox()
         self.shelf_width_ratio.setRange(SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX)
         self.shelf_width_ratio.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
         self.shelf_width_ratio.setDecimals(appearance.SHELF_WIDTH_DECIMALS)
@@ -749,6 +771,7 @@ class SettingsDialog(QDialog):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.verticalScrollBar().setSingleStep(appearance.SETTINGS_SCROLL_STEP)
         scroll.setWidget(page)
         self.pages.addWidget(scroll)
 
@@ -823,7 +846,7 @@ class SettingsDialog(QDialog):
 
     @staticmethod
     def _spin(value, minimum, maximum, suffix=""):
-        spin = QSpinBox()
+        spin = SettingsSpinBox()
         spin.setRange(minimum, maximum)
         spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         spin.setSuffix(suffix)
@@ -1020,6 +1043,12 @@ class MacComboBox(QComboBox):
         self._theme_palette = {**self._theme_palette, **palette}
         self.view().setStyleSheet(appearance.dropdown_stylesheet(self._theme_palette))
         self.update()
+
+    def wheelEvent(self, event):
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
 
     def paintEvent(self, event):
         p = self._theme_palette

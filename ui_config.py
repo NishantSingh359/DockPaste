@@ -90,10 +90,11 @@ CONTROL_FOCUS_BORDER_WIDTH = 1
 BUTTON_BORDER_WIDTH = 1
 
 # Shared scrolling, switches, and dropdowns.
-SCROLLBAR_WIDTH = 10
-SCROLLBAR_MARGIN = (4, 2)
-SCROLLBAR_HANDLE_MIN_HEIGHT = 28
-SCROLLBAR_RADIUS = 4
+SCROLLBAR_WIDTH = 12
+SCROLLBAR_MARGIN = (4, 3)
+SCROLLBAR_HANDLE_MIN_HEIGHT = 36
+SCROLLBAR_RADIUS = 6
+SETTINGS_SCROLL_STEP = 28
 
 SWITCH_SIZE = (42, 24)
 SWITCH_TRACK_RADIUS = 11
@@ -349,6 +350,9 @@ def component(section, key, default=None):
 def settings_stylesheet(palette):
     p = palette
     f = FONT
+    scrollbar_track = p.get("scrollbar_track", p["control_background"])
+    scrollbar_thumb = p.get("scrollbar_thumb", p["secondary_text"])
+    scrollbar_thumb_hover = p.get("scrollbar_thumb_hover", p["accent"])
     return f"""
         QDialog {{ background: {p['background']}; color: {p['text']}; font-family: {FONT_FAMILY}; font-size: {f['dialog_size']}px; }}
         QDialog QWidget {{ font-family: {FONT_FAMILY}; }}
@@ -384,9 +388,12 @@ def settings_stylesheet(palette):
         QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: {CONTROL_FOCUS_BORDER_WIDTH}px solid {p['control_focus_border']}; }}
         QComboBox#macCombo {{ padding: 0; border: none; background: transparent; min-height: {DROPDOWN_MIN_SIZE[1]}px; }}
         QLineEdit, QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ color: {p['text']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; font-weight: {f['control_weight']}; }}
-        QScrollBar:vertical {{ background: transparent; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; }}
-        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; }}
+        QScrollBar:vertical {{ background: {scrollbar_track}; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; border-radius: {SCROLLBAR_RADIUS}px; }}
+        QScrollBar::handle:vertical {{ background: {scrollbar_thumb}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; margin: 1px; }}
+        QScrollBar::handle:vertical:hover, QScrollBar::handle:vertical:pressed {{ background: {scrollbar_thumb_hover}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+        QScrollBar:horizontal {{ height: 0; margin: 0; }}
     """
 
 
@@ -404,6 +411,9 @@ def confirmation_stylesheet(palette):
 
 def dropdown_stylesheet(palette):
     p = palette
+    scrollbar_track = p.get("scrollbar_track", p["control_background"])
+    scrollbar_thumb = p.get("scrollbar_thumb", p["secondary_text"])
+    scrollbar_thumb_hover = p.get("scrollbar_thumb_hover", p["accent"])
     return f"""
         QListView {{
             color: {p['text']};
@@ -427,7 +437,8 @@ def dropdown_stylesheet(palette):
             color: {p['white']};
             background: {p['accent']};
         }}
-        QScrollBar:vertical {{ background: transparent; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; }}
-        QScrollBar::handle:vertical {{ background: {p['border']}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; }}
+        QScrollBar:vertical {{ background: {scrollbar_track}; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; border-radius: {SCROLLBAR_RADIUS}px; }}
+        QScrollBar::handle:vertical {{ background: {scrollbar_thumb}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; margin: 1px; }}
+        QScrollBar::handle:vertical:hover, QScrollBar::handle:vertical:pressed {{ background: {scrollbar_thumb_hover}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """
