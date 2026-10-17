@@ -20,9 +20,9 @@
     "accent": "#007AFF",
     "danger": "#DE5C5C",
     "white": "#cecece",
-    "switch_off": "#4b5263",
-    "switch_disabled": "#323844",
-    "disabled_thumb": "#abb2bf"
+    "switch_off": "#303030",
+    "switch_disabled": "#292929",
+    "disabled_thumb": "#989898"
   },
   "shelf": {
     "background": "#0c0c0c",
