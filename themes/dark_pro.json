@@ -49,7 +49,7 @@
   },
   "context_menu": {
     "background": "#0c0c0c",
-    "border": "#272727",
+    "border": "#303030",
     "hover": "#202020",
     "text": "#007AFF",
     "icon_color": "#cecece",
@@ -65,8 +65,8 @@
     "border": "rgba(62, 68, 82, 0.75)"
   },
   "text_preview": {
-    "background": "#16191d",
-    "text": "#abb2bf",
+    "background": "#0c0c0c",
+    "text": "#cecece",
     "selection": "#61afef"
   },
   "notification": {
@@ -78,10 +78,10 @@
   },
   "tray_menu": {
     "background": "#242424",
-    "border": "#272727",
+    "border": "#303030",
     "text": "#cecece",
     "accent": "#007AFF",
     "selected_text": "#cecece",
-    "separator": "#282828"
+    "separator": "#303030"
   }
 }
