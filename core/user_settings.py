@@ -91,6 +91,7 @@ SETTING_SPECS = {
     "shelf_width_ratio": SettingSpec(
         float, SHELF_WIDTH_RATIO, SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX
     ),
+    "shelf_position": SettingSpec(str, "Top"),
     "theme": SettingSpec(str, "dark"),
     "accent_color": SettingSpec(str, "#007AFF"),
     "chip_width_defaults_version": SettingSpec(
@@ -116,6 +117,12 @@ class UserSettingsStore:
             normalized["chip_max_width"] = normalized["chip_min_width"]
         if not normalized["prevent_oversize_items_enabled"]:
             normalized["show_oversize_warning_enabled"] = False
+        shelf_position = normalized["shelf_position"].strip().lower()
+        normalized["shelf_position"] = (
+            shelf_position.title()
+            if shelf_position in {"top", "bottom"}
+            else "Top"
+        )
         return normalized
 
     def load(self):

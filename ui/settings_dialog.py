@@ -288,6 +288,93 @@ class AccentColorButton(QPushButton):
         painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self._label)
 
 
+class ShelfPositionButton(QPushButton):
+    """Small screen preview showing where the shelf will appear."""
+
+    def __init__(self, position, palette, parent=None):
+        super().__init__(parent)
+        self.position = position
+        self._palette = dict(palette)
+        self._hovered = False
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(f"Shelf position: {position}")
+        self.setFixedSize(*appearance.SHELF_POSITION_PICKER["option_size"])
+        self.setStyleSheet("QPushButton { background: transparent; border: none; }")
+
+    def set_palette(self, palette):
+        self._palette = dict(palette)
+        self.update()
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cfg = appearance.SHELF_POSITION_PICKER
+        p = self._palette
+        card = self.rect().adjusted(1, 1, -1, -1)
+        outline = QColor(p["accent"] if self.isChecked() else p["border"])
+        if self._hovered and not self.isChecked():
+            outline = QColor(p["text"])
+            outline.setAlpha(100)
+        painter.setPen(QPen(outline, 1.5 if self.isChecked() else 1))
+        painter.setBrush(QColor(p["surface"]))
+        painter.drawRoundedRect(card, cfg["option_radius"], cfg["option_radius"])
+
+        preview = card.adjusted(
+            cfg["preview_inset"], cfg["preview_inset"],
+            -cfg["preview_inset"],
+            -(card.height() - cfg["preview_height"] - cfg["preview_inset"]),
+        )
+        gradient = QLinearGradient(preview.topLeft(), preview.bottomRight())
+        gradient.setColorAt(0.0, QColor(p["background"]))
+        gradient.setColorAt(1.0, QColor(p["surface_hover"]))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawRoundedRect(preview, cfg["preview_radius"], cfg["preview_radius"])
+
+        screen = preview.adjusted(cfg["screen_inset"], 8, -cfg["screen_inset"], -8)
+        painter.setBrush(QColor(p["surface"]))
+        painter.drawRoundedRect(screen, cfg["screen_radius"], cfg["screen_radius"])
+
+        # A single accent shelf marker keeps the preview legible and consistent
+        # with the compact color samples used by the theme picker.
+        shelf_width = min(cfg["shelf_width"], screen.width() - 16)
+        shelf_height = cfg["shelf_height"]
+        shelf_y = screen.top() + 5 if self.position == "Top" else screen.bottom() - shelf_height - 5
+        shelf = QRect(screen.center().x() - shelf_width // 2, shelf_y, shelf_width, shelf_height)
+        painter.setBrush(QColor(p["accent"]))
+        painter.drawRoundedRect(shelf, cfg["shelf_radius"], cfg["shelf_radius"])
+
+        label = card.adjusted(10, cfg["preview_height"] + 10, -24, 0)
+        painter.setPen(QColor(p["text"]))
+        font = painter.font()
+        font.setFamily(appearance.FONT_FAMILY)
+        font.setPointSize(cfg["label_size"])
+        font.setWeight(QFont.Weight.DemiBold if self.isChecked() else QFont.Weight.Medium)
+        painter.setFont(font)
+        painter.drawText(label, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.position)
+
+        if self.isChecked():
+            badge_size = cfg["selected_badge_size"]
+            badge = card.adjusted(card.width() - badge_size - 9, card.height() - badge_size - 7, -9, -7)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(p["accent"]))
+            painter.drawEllipse(badge)
+            painter.setPen(QPen(QColor(p["white"]), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.drawLine(badge.left() + 3, badge.center().y(), badge.left() + 6, badge.center().y() + 3)
+            painter.drawLine(badge.left() + 6, badge.center().y() + 3, badge.left() + 11, badge.center().y() - 3)
+
+
 class SettingsSpinBox(QSpinBox):
     """Let the settings page scroll on wheel input unless editing this value."""
 
@@ -328,6 +415,7 @@ class SettingsDialog(QDialog):
         chip_min_width,
         chip_max_width,
         shelf_width_ratio,
+        shelf_position,
         theme_name,
         available_themes,
         theme_previews,
@@ -354,6 +442,7 @@ class SettingsDialog(QDialog):
         on_chip_min_width,
         on_chip_max_width,
         on_shelf_width_ratio,
+        on_shelf_position,
         on_history_date,
         on_history_retention_days,
         on_clear_all_history,
@@ -416,12 +505,12 @@ class SettingsDialog(QDialog):
         general = self._new_page("General", "Choose how DockPaste behaves on your desktop.")
         general_card = self._card(general)
         self.show_on_hover = self._add_switch(
-            general_card, "Show Shelf on Hover", "Reveal the shelf when you move to the top edge of the screen.", show_on_hover, on_show_on_hover
+            general_card, "Show Shelf on Hover", "Reveal the shelf when you move to the configured screen edge.", show_on_hover, on_show_on_hover
         )
         self.show_on_click = self._add_switch(
             general_card,
             "Show Shelf on Click",
-            "Reveal the shelf when you left-click the top-edge trigger.",
+            "Reveal the shelf when you left-click the configured screen edge.",
             show_on_click,
             on_show_on_click,
         )
@@ -532,6 +621,34 @@ class SettingsDialog(QDialog):
             lambda index: self._select_accent_color(self._accent_colors_by_index[index], on_accent_color)
         )
         theme_card_layout.addLayout(accents_row)
+
+        shelf_position_card = self._card(appearance_page)
+        shelf_position_heading = QLabel("Shelf Position")
+        shelf_position_heading.setObjectName("appearanceSectionTitle")
+        shelf_position_card.layout().setContentsMargins(
+            *appearance.SHELF_POSITION_PICKER["card_margins"]
+        )
+        shelf_position_card.layout().setSpacing(
+            appearance.SHELF_POSITION_PICKER["section_gap"]
+        )
+        shelf_position_card.layout().addWidget(shelf_position_heading)
+        position_row = QHBoxLayout()
+        position_row.setSpacing(appearance.SHELF_POSITION_PICKER["row_spacing"])
+        position_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._shelf_position_buttons = {}
+        self._shelf_position_button_group = QButtonGroup(self)
+        self._shelf_position_button_group.setExclusive(True)
+        self._shelf_positions_by_index = {0: "Top", 1: "Bottom"}
+        for index, position in self._shelf_positions_by_index.items():
+            option = ShelfPositionButton(position, self._theme_palette)
+            option.setChecked(position == shelf_position)
+            self._shelf_position_buttons[position] = option
+            self._shelf_position_button_group.addButton(option, index)
+            position_row.addWidget(option)
+        self._shelf_position_button_group.idClicked.connect(
+            lambda index: on_shelf_position(self._shelf_positions_by_index[index])
+        )
+        shelf_position_card.layout().addLayout(position_row)
 
         appearance_card = self._card(appearance_page)
         self.show_clip_indexes = self._add_switch(
@@ -905,6 +1022,8 @@ class SettingsDialog(QDialog):
             button.setChecked(theme_id == selected_theme)
         for button in self._accent_buttons.values():
             button.set_palette(p)
+        for button in self._shelf_position_buttons.values():
+            button.set_palette(p)
         self.setWindowTitle(appearance.WINDOW_TITLE)
         stylesheet = appearance.settings_stylesheet(p)
         self.setStyleSheet(stylesheet)
@@ -925,7 +1044,7 @@ class SettingsDialog(QDialog):
         self.show_on_click.setToolTip(
             "Turn off Show Shelf on Hover to configure click activation."
             if not click_enabled
-            else "Reveal the shelf when you left-click the top-edge trigger."
+            else "Reveal the shelf when you left-click the configured screen edge."
         )
 
     def _select_accent_color(self, color, callback):

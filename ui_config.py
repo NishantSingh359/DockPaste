@@ -172,6 +172,23 @@ THEME_PICKER = {
     "section_gap": 12,
     "accent_section_gap": 18,
 }
+SHELF_POSITION_PICKER = {
+    "card_margins": (22, 20, 22, 22),
+    "option_size": THEME_PICKER["option_size"],
+    "preview_inset": THEME_PICKER["preview_inset"],
+    "preview_height": THEME_PICKER["preview_height"],
+    "preview_radius": THEME_PICKER["preview_radius"],
+    "option_radius": THEME_PICKER["option_radius"],
+    "label_size": THEME_PICKER["option_label_size"],
+    "selected_badge_size": THEME_PICKER["selected_badge_size"],
+    "row_spacing": THEME_PICKER["row_spacing"],
+    "screen_inset": 12,
+    "screen_radius": 7,
+    "shelf_width": 50,
+    "shelf_height": 6,
+    "shelf_radius": 3,
+    "section_gap": 12,
+}
 ACCENT_PICKER = {
     "option_size": (66, 68),
     "swatch_size": 40,

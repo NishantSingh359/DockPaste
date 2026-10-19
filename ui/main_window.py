@@ -316,6 +316,7 @@ class MainWindow(QWidget):
         self._history_date_filter = date.today().isoformat()
         shelf_theme = self.theme.get("shelf", {})
         self.shelf_width_ratio = float(shelf_theme.get("width_ratio", SHELF_WIDTH_RATIO))
+        self.shelf_position = "Top"
         self._next_chip_number = 1
         self._settings_dialog = None
         self._oversized_item_popup = None
@@ -1672,6 +1673,7 @@ class MainWindow(QWidget):
                 else (accent_options[0] if accent_options else self.theme["settings"]["accent"])
             )
             self.history_retention_days = settings["history_retention_days"]
+            self.shelf_position = settings["shelf_position"]
             if needs_sizing_defaults_migration:
                 self.chip_min_width = CHIP_MIN_WIDTH
                 self.chip_max_width = CHIP_MAX_WIDTH
@@ -1705,6 +1707,7 @@ class MainWindow(QWidget):
                 "chip_max_width": self.chip_max_width,
                 "history_retention_days": self.history_retention_days,
                 "shelf_width_ratio": self.shelf_width_ratio,
+                "shelf_position": self.shelf_position,
                 "theme": self.theme_name,
                 "accent_color": self.accent_color,
                 "chip_width_defaults_version": CHIP_WIDTH_DEFAULTS_VERSION,
@@ -1763,6 +1766,7 @@ class MainWindow(QWidget):
             chip_min_width=self.chip_min_width,
             chip_max_width=self.chip_max_width,
             shelf_width_ratio=self.shelf_width_ratio,
+            shelf_position=self.shelf_position,
             history_dates=sorted(
                 set(self.clipboard_manager.get_db().get_available_dates())
                 | {date.today().isoformat()},
@@ -1799,6 +1803,7 @@ class MainWindow(QWidget):
             on_chip_min_width=self.set_chip_min_width,
             on_chip_max_width=self.set_chip_max_width,
             on_shelf_width_ratio=self.set_shelf_width_ratio,
+            on_shelf_position=self.set_shelf_position,
             on_history_date=self.set_history_date_filter,
             on_history_retention_days=self.set_history_retention_days,
             on_clear_all_history=self.clear_all_history,
@@ -1889,6 +1894,19 @@ class MainWindow(QWidget):
         )
         self._screen_geometry_cache_key = None
         self.update_screen_geometry()
+        if self.is_open:
+            self.animate_to(self.open_pos)
+        else:
+            self.move(self.hidden_pos)
+        self._save_context_menu_settings()
+
+    def set_shelf_position(self, position):
+        position = str(position).title()
+        if position not in {"Top", "Bottom"} or position == self.shelf_position:
+            return
+        self.shelf_position = position
+        self._screen_geometry_cache_key = None
+        self.update_screen_geometry("cursor")
         if self.is_open:
             self.animate_to(self.open_pos)
         else:
@@ -2034,12 +2052,20 @@ class MainWindow(QWidget):
             return
 
         edge_geometry = getattr(self, "full_screen_geometry", self.screen_geometry)
-        hover_threshold = edge_geometry.top() + max(HOVER_TRIGGER_HEIGHT, 1)
-        is_over_top_edge = (
+        trigger_height = max(HOVER_TRIGGER_HEIGHT, 1)
+        if self.shelf_position == "Bottom":
+            is_over_position_edge = (
+                mouse_y >= edge_geometry.bottom() - trigger_height + 1
+            )
+        else:
+            is_over_position_edge = (
+                mouse_y <= edge_geometry.top() + trigger_height - 1
+            )
+        is_over_position_edge = (
             self.trigger_left <= cursor.x() <= self.trigger_right
-            and mouse_y <= hover_threshold
+            and is_over_position_edge
         )
-        if is_over_top_edge and (
+        if is_over_position_edge and (
             self.show_on_hover_enabled
             or (self.show_on_click_enabled and left_button_pressed)
             or is_dragging
@@ -2177,11 +2203,23 @@ class MainWindow(QWidget):
             self.setFixedSize(window_size)
 
         x = geometry.left() + (geometry.width() - width) // 2 - self._shadow_margin
-        y = geometry.top() + shelf_top_margin - self._shadow_margin
+        if self.shelf_position == "Bottom":
+            y = (
+                geometry.bottom()
+                - shelf_height
+                - shelf_top_margin
+                - self._shadow_margin
+                + 1
+            )
+        else:
+            y = geometry.top() + shelf_top_margin - self._shadow_margin
         self.screen_geometry = geometry
         self.full_screen_geometry = full_geometry
         self.open_pos = QPoint(x, y)
-        hidden_y = full_geometry.top() - self.height() - 10
+        if self.shelf_position == "Bottom":
+            hidden_y = full_geometry.bottom() + 10
+        else:
+            hidden_y = full_geometry.top() - self.height() - 10
         self.hidden_pos = QPoint(x, hidden_y)
         trigger_center = geometry.left() + geometry.width() // 2
         trigger_half_width = HOVER_TRIGGER_WIDTH // 2
