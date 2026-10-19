@@ -71,7 +71,13 @@ class ImageStore:
                 log_exception(f"Failed to delete stored clipboard image: {path}")
         return deleted
 
-    def save_image(self, image_data, prefix="image", source_size_bytes=None):
+    def reserve_image_path(self):
+        """Allocate a unique managed image path before asynchronous encoding."""
+        return str(self.thumbnail_dir / f"img-{uuid4().hex}.png")
+
+    def save_image(
+        self, image_data, prefix="image", source_size_bytes=None, target_path=None
+    ):
 
         image = self._as_image(image_data)
         if image is None or image.isNull():
@@ -85,7 +91,9 @@ class ImageStore:
             return None
 
         image = self._bounded_image(image)
-        if prefix in {"screenshot", "img"}:
+        if target_path is not None:
+            path = Path(target_path)
+        elif prefix in {"screenshot", "img"}:
             number = 1
             while (self.thumbnail_dir / f"img-{number}.png").exists():
                 number += 1

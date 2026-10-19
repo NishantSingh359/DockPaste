@@ -22,7 +22,7 @@ from urllib.request import (
     build_opener,
 )
 
-from PySide6.QtCore import QObject, QByteArray, QBuffer, QMimeData, Qt, Signal, Slot, QTimer
+from PySide6.QtCore import QObject, QByteArray, QBuffer, QMimeData, Qt, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QImage, QPixmap, QClipboard
 
@@ -141,6 +141,9 @@ class ClipboardManager(QObject):
         self._last_image_cache_key = None
         self._last_image_hash = None
         self._last_notified_clipboard_sequence = None
+        self._internal_clipboard_sequences = set()
+        self._internal_clipboard_write = False
+        self._internal_clipboard_signal_seen = False
         self._pending_image_hashes = set()
         self._ignored_image_hashes = {}
         self._ignored_image_fingerprints = []
@@ -160,10 +163,8 @@ class ClipboardManager(QObject):
         self._rich_formats_by_image_path = {}
         self._image_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="copypin-image")
         self._image_lock = Lock()
-        self._clipboard_change_timer = QTimer(self)
-        self._clipboard_change_timer.setSingleShot(True)
-        self._clipboard_change_timer.setInterval(200)
-        self._clipboard_change_timer.timeout.connect(self._process_clipboard_change)
+        self._reserved_image_records = {}
+        self._reserved_image_records_lock = Lock()
         self.clipboard.dataChanged.connect(self.on_data_changed)
 
     def _migrate_legacy_image_names(self):
@@ -395,9 +396,10 @@ class ClipboardManager(QObject):
             self._pending_restore = False
             self._restore_clipboard_formats = None
 
-        self._ignore_next_count += 1
         self._last_text = text
-        self.clipboard.setText(text, QClipboard.Clipboard)
+        self._write_clipboard(
+            lambda: self.clipboard.setText(text, QClipboard.Clipboard)
+        )
         self._clipboard_image_snapshot = None
         self._clipboard_image_snapshot_hash = None
         self._clipboard_rich_formats_snapshot = {}
@@ -465,14 +467,18 @@ class ClipboardManager(QObject):
                 self._pending_restore = False
                 self._restore_clipboard_formats = None
 
-            self._ignore_next_count += 1
             self._last_image_cache_key = image.cacheKey()
             self._last_image_hash = image_hash
             rich_formats = self._load_rich_formats(image_path)
             if rich_formats:
-                self.clipboard.setMimeData(self._mime_data_with_image(rich_formats, image))
+                mime_data = self._mime_data_with_image(rich_formats, image)
+                self._write_clipboard(
+                    lambda: self.clipboard.setMimeData(mime_data)
+                )
             else:
-                self.clipboard.setImage(image, QClipboard.Clipboard)
+                self._write_clipboard(
+                    lambda: self.clipboard.setImage(image, QClipboard.Clipboard)
+                )
             self._clipboard_image_snapshot = image
             self._clipboard_image_snapshot_hash = image_hash
             self._clipboard_rich_formats_snapshot = rich_formats or {}
@@ -488,13 +494,14 @@ class ClipboardManager(QObject):
             return
 
         self._pending_restore = False
-        self._ignore_next_count += 1
         previous_text = getattr(self, "_restore_text", None)
         previous_image = getattr(self, "_restore_image", None)
         previous_formats = self._restore_clipboard_formats
         if previous_formats is not None:
             if not previous_formats and previous_image is None:
-                self.clipboard.clear(QClipboard.Clipboard)
+                self._write_clipboard(
+                    lambda: self.clipboard.clear(QClipboard.Clipboard)
+                )
             else:
                 mime_data = QMimeData()
                 if previous_image is not None:
@@ -503,7 +510,11 @@ class ClipboardManager(QObject):
                     if format_name.casefold() == "application/x-qt-image":
                         continue
                     mime_data.setData(format_name, QByteArray(payload))
-                self.clipboard.setMimeData(mime_data, QClipboard.Clipboard)
+                self._write_clipboard(
+                    lambda: self.clipboard.setMimeData(
+                        mime_data, QClipboard.Clipboard
+                    )
+                )
             self._last_text = previous_text or ""
             self._clipboard_image_snapshot = previous_image
             self._clipboard_image_snapshot_hash = (
@@ -526,18 +537,27 @@ class ClipboardManager(QObject):
                 self._restore_image_hash or self._hash_image(previous_image)
             )
             if self._restore_rich_formats:
-                self.clipboard.setMimeData(
-                    self._mime_data_with_image(self._restore_rich_formats, previous_image)
+                mime_data = self._mime_data_with_image(
+                    self._restore_rich_formats, previous_image
+                )
+                self._write_clipboard(
+                    lambda: self.clipboard.setMimeData(mime_data)
                 )
             else:
-                self.clipboard.setImage(previous_image, QClipboard.Clipboard)
+                self._write_clipboard(
+                    lambda: self.clipboard.setImage(
+                        previous_image, QClipboard.Clipboard
+                    )
+                )
             self._clipboard_image_snapshot = previous_image
             self._clipboard_image_snapshot_hash = self._last_image_hash
             self._clipboard_rich_formats_snapshot = self._restore_rich_formats or {}
             return
         if previous_text is not None:
             self._last_text = previous_text
-            self.clipboard.setText(previous_text, QClipboard.Clipboard)
+            self._write_clipboard(
+                lambda: self.clipboard.setText(previous_text, QClipboard.Clipboard)
+            )
             self._clipboard_image_snapshot = None
             self._clipboard_image_snapshot_hash = None
             self._clipboard_rich_formats_snapshot = {}
@@ -549,24 +569,56 @@ class ClipboardManager(QObject):
         self._clipboard_image_snapshot = None
         self._clipboard_image_snapshot_hash = None
         self._clipboard_rich_formats_snapshot = {}
-        self.clipboard.clear(QClipboard.Clipboard)
+        self._write_clipboard(
+            lambda: self.clipboard.clear(QClipboard.Clipboard)
+        )
+
+    def _write_clipboard(self, write_operation):
+        """Mark app-owned clipboard writes so delayed signals cannot hide new copies."""
+        self._internal_clipboard_write = True
+        self._internal_clipboard_signal_seen = False
+        try:
+            write_operation()
+        finally:
+            self._internal_clipboard_write = False
+            sequence = self._windows_clipboard_sequence_number()
+            if sequence is None:
+                if not self._internal_clipboard_signal_seen:
+                    self._ignore_next_count += 1
+            elif not self._internal_clipboard_signal_seen:
+                self._internal_clipboard_sequences.add(sequence)
+                if len(self._internal_clipboard_sequences) > 32:
+                    self._internal_clipboard_sequences = {
+                        sequence
+                    }
 
     @Slot()
     @safe_slot("Failed to process clipboard change")
     def on_data_changed(self):
-        if getattr(self, "_ignore_next_count", 0) > 0:
-            self._ignore_next_count -= 1
+        if self._internal_clipboard_write:
+            self._internal_clipboard_signal_seen = True
             return
 
-        # Design tools often publish several clipboard formats in sequence.
-        # Wait for the burst to settle, then inspect the final MIME payload once.
+        # Process each distinct Windows clipboard sequence. Debouncing here can
+        # lose two genuine copies made close together because the clipboard only
+        # retains the newest payload by the time the timer fires.
         if self.sender() is self.clipboard:
             sequence = self._windows_clipboard_sequence_number()
             if sequence is not None:
+                if sequence in self._internal_clipboard_sequences:
+                    self._internal_clipboard_sequences.discard(sequence)
+                    return
                 if sequence == self._last_notified_clipboard_sequence:
                     return
                 self._last_notified_clipboard_sequence = sequence
-            self._clipboard_change_timer.start()
+            elif getattr(self, "_ignore_next_count", 0) > 0:
+                self._ignore_next_count -= 1
+                return
+            self._process_clipboard_change()
+            return
+
+        if getattr(self, "_ignore_next_count", 0) > 0:
+            self._ignore_next_count -= 1
             return
 
         # Keep direct calls useful for integrations and unit-level callers.
@@ -633,6 +685,10 @@ class ClipboardManager(QObject):
             self._clipboard_rich_formats_snapshot = rich_formats
 
             self._last_image_cache_key = cache_key
+            reserved_path = self._reserve_image_record()
+            if reserved_path is None:
+                self._last_image_cache_key = cache_key
+                return
             self._image_executor.submit(
                 self._process_image,
                 image,
@@ -641,6 +697,7 @@ class ClipboardManager(QObject):
                 source_size_bytes,
                 rich_formats,
                 (sequence, owner_name, formats),
+                reserved_path,
             )
             return
 
@@ -867,9 +924,43 @@ class ClipboardManager(QObject):
         self._clipboard_image_snapshot = None
         self._clipboard_image_snapshot_hash = None
         self._clipboard_rich_formats_snapshot = {}
-        self._image_executor.submit(self._download_remote_image, image_url)
+        reserved_path = self._reserve_image_record()
+        if reserved_path is None:
+            return
+        self._image_executor.submit(
+            self._download_remote_image, image_url, reserved_path
+        )
 
-    def _download_remote_image(self, image_url):
+    def _reserve_image_record(self):
+        """Insert an image history row at copy time, before slow image work."""
+        image_path = self.image_store.reserve_image_path()
+        try:
+            record_id = self.db.insert_with_type(image_path, "img")
+            if record_id is None:
+                raise RuntimeError("Could not reserve an image history row")
+            with self._reserved_image_records_lock:
+                self._reserved_image_records[image_path] = record_id
+            return image_path
+        except Exception:
+            log_exception("Failed to reserve clipboard image history position")
+            return None
+
+    def _discard_reserved_image_record(self, image_path):
+        if not image_path:
+            return
+        with self._reserved_image_records_lock:
+            self._reserved_image_records.pop(image_path, None)
+        try:
+            self.db.delete_by_content(image_path)
+        except Exception:
+            log_exception("Failed to remove incomplete clipboard image history row")
+        try:
+            Path(image_path).unlink(missing_ok=True)
+            Path(f"{image_path}.mime.json").unlink(missing_ok=True)
+        except OSError:
+            log_exception("Failed to remove incomplete clipboard image file")
+
+    def _download_remote_image(self, image_url, reserved_path):
         """Fetch a browser-copied image reference and store its decoded pixels."""
         try:
             # Resolve and pin the destination before connecting. Reject private
@@ -900,9 +991,16 @@ class ClipboardManager(QObject):
                 self.oversized_item_rejected.emit()
                 return
             self._last_image_cache_key = image.cacheKey()
-            self._process_image(image, source_size_bytes=source_size_bytes)
+            self._process_image(
+                image,
+                source_size_bytes=source_size_bytes,
+                reserved_path=reserved_path,
+            )
         except Exception:
             log_exception("Failed to fetch copied image from browser URL")
+        finally:
+            if not Path(reserved_path).is_file():
+                self._discard_reserved_image_record(reserved_path)
 
     @staticmethod
     def _is_vector_markup(text, mime):
@@ -998,8 +1096,9 @@ class ClipboardManager(QObject):
 
     def _process_image(
         self, image, image_hash=None, reserved=False, source_size_bytes=None, rich_formats=None,
-        clipboard_metadata=None,
+        clipboard_metadata=None, reserved_path=None,
     ):
+        stored = False
         try:
             image_cache_key = image.cacheKey()
             image_hash = image_hash or self._hash_image(image)
@@ -1033,9 +1132,16 @@ class ClipboardManager(QObject):
                 image,
                 "screenshot",
                 source_size_bytes,
+                target_path=reserved_path,
             )
             if not image_path:
                 return
+
+            if reserved_path is not None:
+                with self._reserved_image_records_lock:
+                    record_id = self._reserved_image_records.get(reserved_path)
+                if record_id is None or self.db.get_by_id(record_id) is None:
+                    return
 
             image_file = Path(image_path)
             if (self.enforce_size_limit and image_file.is_file()
@@ -1044,9 +1150,14 @@ class ClipboardManager(QObject):
                 self.oversized_item_rejected.emit()
                 return
 
-            self.db.insert_with_type(image_path, "img")
+            if reserved_path is None:
+                self.db.insert_with_type(image_path, "img")
             if rich_formats:
                 self._save_rich_formats(image_path, rich_formats)
+            stored = True
+            if reserved_path is not None:
+                with self._reserved_image_records_lock:
+                    self._reserved_image_records.pop(reserved_path, None)
             if image_cache_key == self._last_image_cache_key:
                 with self._image_lock:
                     self._last_image_hash = image_hash
@@ -1060,6 +1171,8 @@ class ClipboardManager(QObject):
             if image_hash:
                 with self._image_lock:
                     self._pending_image_hashes.discard(image_hash)
+            if reserved_path is not None and not stored:
+                self._discard_reserved_image_record(reserved_path)
 
     def _hash_image(self, image):
         buffer = QBuffer()
@@ -1184,9 +1297,12 @@ class ClipboardManager(QObject):
         return None
 
     def close(self):
-        self._clipboard_change_timer.stop()
         try:
             self.clipboard.dataChanged.disconnect(self.on_data_changed)
         except (RuntimeError, TypeError):
             pass
         self._image_executor.shutdown(wait=True, cancel_futures=True)
+        with self._reserved_image_records_lock:
+            pending_paths = tuple(self._reserved_image_records)
+        for image_path in pending_paths:
+            self._discard_reserved_image_record(image_path)
