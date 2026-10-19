@@ -109,25 +109,33 @@ from utils.app_icon import create_app_icon
 
 
 class HistoryLoadSignals(QObject):
-    completed = Signal(int, str, object, str)
+    completed = Signal(int, str, object, bool, str)
 
 
 class HistoryLoadTask(QRunnable):
     """Read one date's clip records away from the GUI thread."""
 
-    def __init__(self, database, generation, clip_date):
+    def __init__(self, database, generation, clip_date, cursor=None, page_size=100):
         super().__init__()
         self.database = database
         self.generation = generation
         self.clip_date = clip_date
+        self.cursor = cursor
+        self.page_size = page_size
         self.signals = HistoryLoadSignals()
 
     def run(self):
         try:
-            records = self.database.get_by_date(self.clip_date)
-            self.signals.completed.emit(self.generation, self.clip_date, records, "")
+            records, has_more = self.database.get_by_date_page(
+                self.clip_date, self.page_size, self.cursor
+            )
+            self.signals.completed.emit(
+                self.generation, self.clip_date, records, has_more, ""
+            )
         except Exception as exc:
-            self.signals.completed.emit(self.generation, self.clip_date, None, str(exc))
+            self.signals.completed.emit(
+                self.generation, self.clip_date, None, False, str(exc)
+            )
 
 
 class ShelfContainer(QWidget):
@@ -255,6 +263,12 @@ class MainWindow(QWidget):
         self._history_live_additions = {}
         self._history_records_to_render = []
         self._history_pending_records = {}
+        self._history_placeholders = {}
+        self._history_page_cursor = None
+        self._history_has_more = False
+        self._history_page_size = max(
+            100, int(ui_config.HISTORY_RENDER_PAGE_SIZE)
+        )
         self._history_render_index = 0
         self._history_render_limit = 0
         self._history_loading = False
@@ -397,8 +411,14 @@ class MainWindow(QWidget):
         self.scroll.horizontalScrollBar().valueChanged.connect(
             self._maybe_load_history_page
         )
+        self.scroll.horizontalScrollBar().valueChanged.connect(
+            self._schedule_history_virtualization
+        )
         self.scroll.horizontalScrollBar().rangeChanged.connect(
             lambda *_: self._maybe_load_history_page()
+        )
+        self.scroll.horizontalScrollBar().rangeChanged.connect(
+            lambda *_: self._schedule_history_virtualization()
         )
         self.scroll.setFixedHeight(
             int(shelf_theme.get("height", 52)) - int(shelf_padding[1]) - int(shelf_padding[3])
@@ -409,6 +429,7 @@ class MainWindow(QWidget):
         self.chip_layout = QHBoxLayout(scroll_widget)
         self.chip_layout.setContentsMargins(0, 0, 0, 0)
         self.chip_layout.setSpacing(ui_config.SHELF["chip_spacing"])
+        self._scroll_content_widget = scroll_widget
 
         self.scroll.setWidget(scroll_widget)
         container_layout.addWidget(self.scroll)
@@ -497,6 +518,21 @@ class MainWindow(QWidget):
             except Exception:
                 log_exception("Failed to retrieve clipboard index")
 
+        if not _bulk and clip_date == self._history_date_filter and not self._history_loading:
+            prior_record = next(
+                (
+                    record for record in self._history_records_to_render
+                    if record["content"] == content
+                ),
+                None,
+            )
+            existing_widget = self.chips_by_content.get(content)
+            if prior_record is not None:
+                pinned = bool(prior_record.get("pinned", 0))
+            elif existing_widget is not None:
+                pinned = bool(existing_widget.pinned)
+            self._upsert_loaded_history_record(content, clip_date, clip_index, pinned)
+
         if (
             self._history_loading
             and not _bulk
@@ -530,7 +566,8 @@ class MainWindow(QWidget):
                     # Refresh all cached indexes before sorting; otherwise the
                     # shelf can compare the new index against stale sibling indexes.
                     self._refresh_clip_indexes_for_date(clip_date)
-                    self._reorder_chip(existing_chip)
+                    if not self._history_placeholders:
+                        self._reorder_chip(existing_chip)
                     self.scroll.horizontalScrollBar().setValue(
                         self.scroll.horizontalScrollBar().minimum()
                     )
@@ -551,20 +588,29 @@ class MainWindow(QWidget):
         generation = self._history_load_generation
         self._history_records_to_render = []
         self._history_pending_records = {}
+        self._history_page_cursor = None
+        self._history_has_more = False
         self._history_render_index = 0
         self._history_bulk_rendering = False
         self._history_live_additions = {}
         self._set_history_loading(True)
         self._clear_history_chip_widgets()
+        self._start_history_page_load(generation, clip_date)
+
+    def _start_history_page_load(self, generation, clip_date):
         task = HistoryLoadTask(
-            self.clipboard_manager.get_db(), generation, clip_date
+            self.clipboard_manager.get_db(),
+            generation,
+            clip_date,
+            self._history_page_cursor,
+            self._history_page_size,
         )
         task.signals.completed.connect(self._on_history_records_loaded)
         self._history_load_tasks[generation] = task
         self._history_load_pool.start(task)
 
-    @Slot(int, str, object, str)
-    def _on_history_records_loaded(self, generation, clip_date, records, error):
+    @Slot(int, str, object, bool, str)
+    def _on_history_records_loaded(self, generation, clip_date, records, has_more, error):
         self._history_load_tasks.pop(generation, None)
         if generation != self._history_load_generation:
             return
@@ -574,8 +620,22 @@ class MainWindow(QWidget):
             self._history_live_additions = {}
             self._set_history_loading(False)
             return
+        page_cursor = None
+        if records:
+            last_page_record = records[-1]
+            page_cursor = (
+                int(last_page_record.get("pinned", 0)),
+                int(last_page_record.get("index") or 0),
+                int(last_page_record.get("id") or 0),
+            )
         if self._history_live_additions:
-            records_by_content = {record["content"]: record for record in records}
+            previously_loaded = {
+                record["content"] for record in self._history_records_to_render
+            }
+            records_by_content = {
+                record["content"]: record
+                for record in (*self._history_records_to_render, *records)
+            }
             for content, live_record in self._history_live_additions.items():
                 if content in records_by_content:
                     records_by_content[content] = {
@@ -584,15 +644,80 @@ class MainWindow(QWidget):
                     }
                 else:
                     records_by_content[content] = live_record
-            records = sorted(
+            combined_records = sorted(
                 records_by_content.values(),
                 key=lambda record: (
                     not bool(record.get("pinned", 0)),
                     -int(record.get("index") or 0),
                 ),
             )
+            self._history_records_to_render = [
+                records_by_content[content]
+                for content in previously_loaded
+                if content in records_by_content
+            ]
+            self._history_records_to_render.sort(
+                key=lambda record: (
+                    not bool(record.get("pinned", 0)),
+                    -int(record.get("index") or 0),
+                )
+            )
+            loaded_contents = previously_loaded
+            records = [
+                record for record in combined_records
+                if record["content"] not in loaded_contents
+            ]
         self._history_live_additions = {}
-        self._show_history_records(records)
+        existing_contents = {
+            record["content"] for record in self._history_records_to_render
+        }
+        page_contents = set()
+        unique_page_records = []
+        for record in records:
+            content = record["content"]
+            if content in existing_contents or content in page_contents:
+                continue
+            page_contents.add(content)
+            unique_page_records.append(record)
+        records = unique_page_records
+        if not self._history_records_to_render:
+            self._history_records_to_render = []
+            self._history_render_index = 0
+        if records:
+            self._history_records_to_render.extend(records)
+            self._history_pending_records.update(
+                {record["content"]: record for record in records}
+            )
+        if page_cursor is not None:
+            self._history_page_cursor = (
+                int(page_cursor[0]),
+                int(page_cursor[1]),
+                int(page_cursor[2]),
+            )
+        self._history_has_more = has_more
+        self._history_records_to_render.sort(
+            key=lambda record: (
+                not bool(record.get("pinned", 0)),
+                -int(record.get("index") or 0),
+                -int(record.get("id") or 0),
+            )
+        )
+        if self._history_render_index:
+            self._rebuild_history_layout()
+        self._history_render_limit = min(
+            len(self._history_records_to_render),
+            self._history_render_index + ui_config.HISTORY_RENDER_PAGE_SIZE,
+        )
+        if self._history_render_index < self._history_render_limit:
+            self._history_bulk_rendering = True
+            QTimer.singleShot(
+                0,
+                lambda: self._render_history_batch(self._history_render_generation),
+            )
+        else:
+            self._history_bulk_rendering = False
+            self._set_history_loading(False)
+            self.update_empty_state()
 
     def _set_history_loading(self, loading):
         self._history_loading = bool(loading)
@@ -609,6 +734,8 @@ class MainWindow(QWidget):
             record["content"]: record for record in self._history_records_to_render
         }
         self._history_render_index = 0
+        self._history_page_cursor = None
+        self._history_has_more = False
         self._history_render_limit = min(
             len(self._history_records_to_render),
             ui_config.HISTORY_RENDER_PAGE_SIZE,
@@ -630,6 +757,10 @@ class MainWindow(QWidget):
         self.chips_by_content.clear()
         self._clip_dates_by_content.clear()
         self._remove_chip_widgets(chips)
+        for placeholder in self._history_placeholders.values():
+            self.chip_layout.removeWidget(placeholder)
+            placeholder.deleteLater()
+        self._history_placeholders.clear()
         self._next_chip_number = 1
 
     def _render_history_batch(self, generation):
@@ -664,13 +795,13 @@ class MainWindow(QWidget):
             return
 
         self._history_bulk_rendering = False
+        self._schedule_history_virtualization()
         self.scroll.refresh_edge_fades()
         self.update_empty_state()
         self._set_history_loading(False)
         if self._history_render_index < len(self._history_records_to_render):
             self._maybe_load_history_page()
-        else:
-            self._history_records_to_render = []
+        elif not self._history_has_more:
             self._history_pending_records = {}
             self._history_live_additions = {}
 
@@ -678,7 +809,6 @@ class MainWindow(QWidget):
         if (
             self._history_loading
             or self._history_bulk_rendering
-            or self._history_render_index >= len(self._history_records_to_render)
         ):
             return
 
@@ -691,17 +821,155 @@ class MainWindow(QWidget):
         if not near_end:
             return
 
-        self._history_render_limit = min(
+        if self._history_render_index < len(self._history_records_to_render):
+            self._history_render_limit = min(
+                len(self._history_records_to_render),
+                self._history_render_index + ui_config.HISTORY_RENDER_PAGE_SIZE,
+            )
+            self._history_bulk_rendering = True
+            self._set_history_loading(True)
+            generation = self._history_render_generation
+            QTimer.singleShot(0, lambda: self._render_history_batch(generation))
+        elif self._history_has_more:
+            self._history_loading = True
+            self._set_history_loading(True)
+            self._start_history_page_load(
+                self._history_load_generation,
+                self._history_date_filter,
+            )
+
+    def _schedule_history_virtualization(self):
+        if getattr(self, "_history_virtualization_pending", False):
+            return
+        self._history_virtualization_pending = True
+        QTimer.singleShot(0, self._virtualize_history_chips)
+
+    def _virtualize_history_chips(self):
+        self._history_virtualization_pending = False
+        if not hasattr(self, "_scroll_content_widget"):
+            return
+
+        scrollbar = self.scroll.horizontalScrollBar()
+        left = max(0, scrollbar.value() - self.scroll.viewport().width())
+        right = scrollbar.value() + 2 * self.scroll.viewport().width()
+        spacing = self.chip_layout.spacing()
+        x = 0
+        visible_record_count = min(
+            self._history_render_index,
             len(self._history_records_to_render),
-            self._history_render_index + ui_config.HISTORY_RENDER_PAGE_SIZE,
         )
-        self._history_bulk_rendering = True
-        self._set_history_loading(True)
-        generation = self._history_render_generation
-        QTimer.singleShot(0, lambda: self._render_history_batch(generation))
+
+        for index in range(visible_record_count):
+            record = self._history_records_to_render[index]
+            content = record["content"]
+            chip = self.chips_by_content.get(content)
+            placeholder = self._history_placeholders.get(content)
+            item = chip or placeholder
+            if item is None:
+                continue
+            width = item.width() if chip else placeholder.width()
+            item_left, item_right = x, x + width
+            should_be_materialized = item_right >= left and item_left <= right
+            layout_index = index + 1  # The empty-state widget occupies slot zero.
+
+            if should_be_materialized and placeholder is not None:
+                self._history_placeholders.pop(content, None)
+                self.chip_layout.removeWidget(placeholder)
+                placeholder.deleteLater()
+                self._clip_dates_by_content[content] = record.get("date")
+                self.add_chip(
+                    content,
+                    record.get("index"),
+                    pinned=bool(record.get("pinned", 0)),
+                    bulk=True,
+                    _layout_index=layout_index,
+                )
+                chip = self.chips_by_content.get(content)
+                if chip is not None:
+                    chip.show()
+                    width = chip.width()
+                    item_right = item_left + width
+            elif should_be_materialized and chip is not None:
+                chip.show()
+            elif not should_be_materialized and chip is not None:
+                width = chip.width()
+                self.chip_layout.removeWidget(chip)
+                placeholder = QWidget(self._scroll_content_widget)
+                placeholder.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+                placeholder.setFixedSize(width, chip.height())
+                self.chip_layout.insertWidget(layout_index, placeholder)
+                self._history_placeholders[content] = placeholder
+                self.chips_by_content.pop(content, None)
+                chip.hide()
+                chip.setGraphicsEffect(None)
+                chip.deleteLater()
+
+            x = item_right + spacing
+        self.scroll.refresh_edge_fades()
+
+    def _rebuild_history_layout(self):
+        """Reorder materialized chips and placeholders to match the record model."""
+        if not hasattr(self, "_scroll_content_widget"):
+            return
+        old_scroll = self.scroll.horizontalScrollBar().value()
+        retained = {**self.chips_by_content, **self._history_placeholders}
+        while self.chip_layout.count():
+            item = self.chip_layout.takeAt(0)
+            widget = item.widget() if item else None
+            if widget is not None and widget is not self.empty_state_widget:
+                widget.hide()
+        self.chip_layout.addWidget(self.empty_state_widget)
+
+        visible_count = min(self._history_render_index, len(self._history_records_to_render))
+        for record in self._history_records_to_render[:visible_count]:
+            content = record["content"]
+            widget = retained.get(content)
+            if widget is None:
+                self._clip_dates_by_content[content] = record.get("date")
+                self.add_chip(
+                    content,
+                    record.get("index"),
+                    pinned=bool(record.get("pinned", 0)),
+                    bulk=True,
+                    _layout_index=self.chip_layout.count(),
+                )
+                widget = self.chips_by_content.get(content)
+            elif isinstance(widget, ChipWidget):
+                self.chip_layout.addWidget(widget)
+                widget.show()
+            else:
+                self.chip_layout.addWidget(widget)
+                widget.show()
+        self.chip_layout.addStretch()
+        self.scroll.horizontalScrollBar().setValue(old_scroll)
+        self._schedule_history_virtualization()
+
+    def _upsert_loaded_history_record(self, content, clip_date, clip_index, pinned):
+        if clip_date != self._history_date_filter or self._history_loading:
+            return
+        record = next(
+            (item for item in self._history_records_to_render if item["content"] == content),
+            None,
+        )
+        if record is None:
+            record = {"content": content, "date": clip_date, "index": clip_index, "pinned": int(bool(pinned))}
+            self._history_records_to_render.append(record)
+            self._history_render_index += 1
+        else:
+            record["index"] = clip_index
+            record["pinned"] = int(bool(pinned))
+        self._history_records_to_render.sort(
+            key=lambda item: (
+                not bool(item.get("pinned", 0)),
+                -int(item.get("index") or 0),
+                -int(item.get("id") or 0),
+            )
+        )
+        self._history_pending_records[content] = record
+        self._rebuild_history_layout()
 
     @safe_slot("Failed to create clipboard chip")
-    def add_chip(self, content, clip_index=None, pinned=False, bulk=False):
+    def add_chip(self, content, clip_index=None, pinned=False, bulk=False, _layout_index=None):
         if content in self.chips_by_content:
             return
 
@@ -728,8 +996,11 @@ class MainWindow(QWidget):
         chip.clear_all_requested.connect(self.clear_unpinned_clips)
         chip.context_action_triggered.connect(self.keep_shelf_open_after_context_action)
         self.chips_by_content[content] = chip
+        self._clip_dates_by_content.setdefault(content, self._history_date_filter)
         if bulk:
-            self.chip_layout.insertWidget(max(0, self.chip_layout.count() - 1), chip)
+            if _layout_index is None:
+                _layout_index = max(0, self.chip_layout.count() - 1)
+            self.chip_layout.insertWidget(_layout_index, chip)
         else:
             self.update_empty_state()
             self.insert_chip(chip)
@@ -752,7 +1023,8 @@ class MainWindow(QWidget):
     @safe_slot("Failed to remove clipboard chip")
     def remove_clip(self, content):
         chip = self.chips_by_content.pop(content, None)
-        if not chip:
+        placeholder = self._history_placeholders.pop(content, None)
+        if not chip and not placeholder:
             return
 
         clip_date = self._clip_dates_by_content.pop(content, None)
@@ -760,7 +1032,25 @@ class MainWindow(QWidget):
             self.clipboard_manager.get_db().delete_by_content(content, clip_date)
         except Exception:
             log_exception("Failed to delete clipboard item")
-        self.remove_chip_widget(chip)
+        if placeholder:
+            self.chip_layout.removeWidget(placeholder)
+            placeholder.deleteLater()
+        if chip:
+            self.remove_chip_widget(chip)
+        removed_index = next(
+            (i for i, record in enumerate(self._history_records_to_render) if record["content"] == content),
+            None,
+        )
+        if removed_index is not None:
+            self._history_records_to_render.pop(removed_index)
+            self._history_pending_records.pop(content, None)
+            if removed_index < self._history_render_index:
+                self._history_render_index -= 1
+            self._history_render_limit = max(
+                self._history_render_index,
+                self._history_render_limit - (removed_index < self._history_render_limit),
+            )
+            self._rebuild_history_layout()
         self._refresh_clip_indexes_for_date(clip_date)
 
     def remove_chip_widget(self, chip):
@@ -817,26 +1107,15 @@ class MainWindow(QWidget):
 
     @safe_slot("Failed to clear unpinned clips")
     def clear_unpinned_clips(self):
-        chips = [
-            chip
-            for chip in list(self.chips_by_content.values())
-            if not chip.pinned and not getattr(chip, "_is_deleting", False)
-        ]
-
-        affected_dates = set()
-        for chip in chips:
-            self.chips_by_content.pop(chip.content, None)
-            clip_date = self._clip_dates_by_content.pop(chip.content, None)
-            if clip_date:
-                affected_dates.add(clip_date)
-            try:
-                self.clipboard_manager.get_db().delete_by_content(chip.content, clip_date)
-            except Exception:
-                log_exception("Failed to delete clipboard item during clear")
-
-        self._remove_chip_widgets(chips)
-        for clip_date in affected_dates:
-            self._refresh_clip_indexes_for_date(clip_date)
+        clip_date = self._history_date_filter
+        if clip_date is None:
+            return
+        try:
+            self.clipboard_manager.get_db().delete_unpinned(clip_date)
+        except Exception:
+            log_exception("Failed to delete clipboard items during clear")
+            return
+        self._request_history_load(clip_date)
 
     @safe_slot("Failed to pin clipboard chip")
     def pin_clip(self, content):
@@ -854,8 +1133,24 @@ class MainWindow(QWidget):
                 )
             except Exception:
                 log_exception("Failed to save clipboard pin state")
-
-        self._reorder_chip(chip)
+        record = next(
+            (item for item in self._history_records_to_render if item["content"] == content),
+            None,
+        )
+        if record is not None:
+            record["pinned"] = int(bool(chip.pinned))
+            self._history_records_to_render.sort(
+                key=lambda item: (
+                    not bool(item.get("pinned", 0)),
+                    -int(item.get("index") or 0),
+                    -int(item.get("id") or 0),
+                )
+            )
+            self._sync_history_page_cursor()
+        if self._history_placeholders:
+            self._rebuild_history_layout()
+        else:
+            self._reorder_chip(chip)
 
     def _reorder_chip(self, chip):
         if not chip or getattr(chip, "_is_deleting", False):
@@ -981,16 +1276,51 @@ class MainWindow(QWidget):
         chip.set_clip_index(clip_index, show_index=self.clip_indexing_enabled)
         self._next_chip_number = max(self._next_chip_number, int(clip_index) + 1)
 
+    def _sync_history_page_cursor(self):
+        """Keep the keyset cursor aligned when loaded rows are reordered."""
+        if self._history_page_cursor is None:
+            return
+        _, _, cursor_id = self._history_page_cursor
+        cursor_record = next(
+            (
+                record for record in self._history_records_to_render
+                if int(record.get("id") or 0) == cursor_id
+            ),
+            None,
+        )
+        if cursor_record is not None:
+            self._history_page_cursor = (
+                int(cursor_record.get("pinned", 0)),
+                int(cursor_record.get("index") or 0),
+                cursor_id,
+            )
+
     def _refresh_clip_indexes_for_date(self, clip_date):
         if clip_date is None:
             return
+        contents = [
+            record["content"]
+            for record in self._history_records_to_render
+            if record.get("date") == clip_date
+        ]
         try:
-            records = self.clipboard_manager.get_db().get_by_date(clip_date)
+            indexes = self.clipboard_manager.get_db().get_indexes_for_contents(
+                clip_date, contents
+            )
         except Exception:
             log_exception("Failed to refresh clipboard indexes")
             return
-
-        indexes = {record["content"]: record["index"] for record in records}
+        for record in self._history_records_to_render:
+            if record.get("date") == clip_date and record["content"] in indexes:
+                record["index"] = indexes[record["content"]]
+        self._sync_history_page_cursor()
+        self._history_records_to_render.sort(
+            key=lambda record: (
+                not bool(record.get("pinned", 0)),
+                -int(record.get("index") or 0),
+                -int(record.get("id") or 0),
+            )
+        )
         for content, chip in self.chips_by_content.items():
             if self._clip_dates_by_content.get(content) != clip_date:
                 continue
@@ -998,6 +1328,8 @@ class MainWindow(QWidget):
                 chip.set_clip_index(
                     indexes[content], show_index=self.clip_indexing_enabled
                 )
+        if self._history_placeholders:
+            self._rebuild_history_layout()
 
     def refresh_chip_indexes(self):
         chips = []

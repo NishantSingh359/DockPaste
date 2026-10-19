@@ -199,6 +199,10 @@ class ClipboardDatabase:
         conn.execute(
             'CREATE INDEX IF NOT EXISTS idx_clips_date_index ON clips(date DESC, "index" DESC)'
         )
+        conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_clips_date_pinned_index '
+            'ON clips(date, pinned DESC, "index" DESC)'
+        )
 
     def _migrate_legacy_table(self, conn):
         columns = {
@@ -379,6 +383,62 @@ class ClipboardDatabase:
         finally:
             conn.close()
 
+    def get_by_date_page(
+        self,
+        clip_date: str,
+        limit: int = 100,
+        cursor: tuple[int, int, int] | None = None,
+    ) -> tuple[list[dict], bool]:
+        """Return one stable keyset page for a date and whether another exists.
+
+        Cursor fields are ``(pinned, index, rowid)`` from the final returned
+        row. Ordering and cursor predicates intentionally match exactly so
+        paging remains stable when a date contains many clips.
+        """
+        limit = max(1, int(limit))
+        conn = self._get_connection()
+        try:
+            if cursor is None:
+                rows = conn.execute(
+                    """
+                    SELECT rowid AS id, date, "index", type, content, pinned
+                    FROM clips
+                    WHERE date = ?
+                    ORDER BY pinned DESC, "index" DESC, rowid DESC
+                    LIMIT ?
+                    """,
+                    (clip_date, limit + 1),
+                ).fetchall()
+            else:
+                pinned, index, rowid = (int(value) for value in cursor)
+                rows = conn.execute(
+                    """
+                    SELECT rowid AS id, date, "index", type, content, pinned
+                    FROM clips
+                    WHERE date = ? AND (
+                        pinned < ? OR
+                        (pinned = ? AND "index" < ?) OR
+                        (pinned = ? AND "index" = ? AND rowid < ?)
+                    )
+                    ORDER BY pinned DESC, "index" DESC, rowid DESC
+                    LIMIT ?
+                    """,
+                    (
+                        clip_date,
+                        pinned,
+                        pinned,
+                        index,
+                        pinned,
+                        index,
+                        rowid,
+                        limit + 1,
+                    ),
+                ).fetchall()
+            has_more = len(rows) > limit
+            return [dict(row) for row in rows[:limit]], has_more
+        finally:
+            conn.close()
+
     def set_pinned(self, content: str, clip_date: str, pinned: bool) -> bool:
         """Persist a clip's pin state for its specific history date."""
         def operation(conn):
@@ -387,6 +447,17 @@ class ClipboardDatabase:
                 (int(bool(pinned)), clip_date, content),
             )
             return cursor.rowcount > 0
+
+        return self._write_with_retry(operation)
+
+    def delete_unpinned(self, clip_date: str) -> int:
+        """Delete every unpinned clip for one history date."""
+        def operation(conn):
+            cursor = conn.execute(
+                "DELETE FROM clips WHERE date = ? AND pinned = 0",
+                (clip_date,),
+            )
+            return cursor.rowcount
 
         return self._write_with_retry(operation)
 
@@ -416,6 +487,30 @@ class ClipboardDatabase:
                 (clip_date, content),
             ).fetchone()
             return int(row["index"]) if row else None
+        finally:
+            conn.close()
+
+    def get_indexes_for_contents(
+        self, clip_date: str, contents: list[str]
+    ) -> dict[str, int]:
+        """Get indexes for a bounded set of clips without loading a full day."""
+        if not contents:
+            return {}
+        conn = self._get_connection()
+        try:
+            indexes = {}
+            for start in range(0, len(contents), 400):
+                batch = contents[start:start + 400]
+                placeholders = ",".join("?" for _ in batch)
+                rows = conn.execute(
+                    f'SELECT content, "index" FROM clips WHERE date = ? '
+                    f"AND content IN ({placeholders})",
+                    (clip_date, *batch),
+                ).fetchall()
+                indexes.update(
+                    {row["content"]: int(row["index"]) for row in rows}
+                )
+            return indexes
         finally:
             conn.close()
 
