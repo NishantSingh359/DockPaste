@@ -14,6 +14,9 @@ class TextPreviewDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(APP_NAME)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        # The shelf is a topmost, non-activating tool window. Keep its preview
+        # above the shelf so it cannot open hidden behind the click source.
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowIcon(create_app_icon())
 

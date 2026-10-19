@@ -1518,13 +1518,15 @@ class MainWindow(QWidget):
             except RuntimeError:
                 self._text_preview_dialog = None
         self._text_preview_dialog = TextPreviewDialog(
-            text, self.theme, available_geometry
+            text, self.theme, available_geometry, parent=self
         )
         preview_dialog = self._text_preview_dialog
         self._text_preview_dialog.destroyed.connect(
             lambda _object=None: self._clear_text_preview_reference(preview_dialog)
         )
         self._text_preview_dialog.show()
+        self._text_preview_dialog.raise_()
+        self._text_preview_dialog.activateWindow()
 
     def _clear_text_preview_reference(self, preview_dialog):
         if self._text_preview_dialog is preview_dialog:
