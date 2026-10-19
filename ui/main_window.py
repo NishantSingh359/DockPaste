@@ -278,6 +278,8 @@ class MainWindow(QWidget):
         self.is_shelf_pinned = False
         self._is_hiding = False
         self._hotkey_was_down = False
+        self._left_mouse_button_was_down = False
+        self._left_mouse_press_pos = None
         self._screen_geometry_cache_key = None
         self._chip_position_animation_group = None
         self._chip_position_targets = {}
@@ -295,6 +297,7 @@ class MainWindow(QWidget):
             accent_options[0] if accent_options else self.theme["settings"]["accent"],
         )
         self.show_on_hover_enabled = SHELF_SHOW_ON_HOVER
+        self.show_on_click_enabled = True
         self.hide_on_paste_enabled = HIDE_ON_PASTE
         self.highlight_shelf_on_drag_enabled = True
         self._is_drag_over_shelf = False
@@ -1473,6 +1476,10 @@ class MainWindow(QWidget):
         self.show_on_hover_enabled = bool(enabled)
         self._save_context_menu_settings()
 
+    def set_show_on_click_enabled(self, enabled):
+        self.show_on_click_enabled = bool(enabled)
+        self._save_context_menu_settings()
+
     def set_hide_on_paste_enabled(self, enabled):
         self.hide_on_paste_enabled = bool(enabled)
         self._save_context_menu_settings()
@@ -1644,6 +1651,7 @@ class MainWindow(QWidget):
                 settings.get("chip_width_defaults_version", 0) < CHIP_WIDTH_DEFAULTS_VERSION
             )
             self.show_on_hover_enabled = settings["show_on_hover_enabled"]
+            self.show_on_click_enabled = settings["show_on_click_enabled"]
             self.hide_on_paste_enabled = settings["hide_on_paste_enabled"]
             self.highlight_shelf_on_drag_enabled = settings["highlight_shelf_on_drag_enabled"]
             self.clip_scroll_speed = settings["clip_scroll_speed"]
@@ -1681,6 +1689,7 @@ class MainWindow(QWidget):
         self._persisted_settings = self._settings_store.save(
             {
                 "show_on_hover_enabled": self.show_on_hover_enabled,
+                "show_on_click_enabled": self.show_on_click_enabled,
                 "hide_on_paste_enabled": self.hide_on_paste_enabled,
                 "highlight_shelf_on_drag_enabled": self.highlight_shelf_on_drag_enabled,
                 "clip_scroll_speed": self.clip_scroll_speed,
@@ -1739,6 +1748,7 @@ class MainWindow(QWidget):
 
         self._settings_dialog = SettingsDialog(
             show_on_hover=self.show_on_hover_enabled,
+            show_on_click=self.show_on_click_enabled,
             hide_on_paste=self.hide_on_paste_enabled,
             highlight_shelf_on_drag=self.highlight_shelf_on_drag_enabled,
             clip_scroll_speed=self.clip_scroll_speed,
@@ -1774,6 +1784,7 @@ class MainWindow(QWidget):
             accent_options=self.theme.get("accent_options", []),
             theme=self.theme,
             on_show_on_hover=self.set_show_on_hover_enabled,
+            on_show_on_click=self.set_show_on_click_enabled,
             on_hide_on_paste=self.set_hide_on_paste_enabled,
             on_highlight_shelf_on_drag=self.set_highlight_shelf_on_drag_enabled,
             on_clip_scroll_speed=self.set_clip_scroll_speed,
@@ -1949,13 +1960,34 @@ class MainWindow(QWidget):
 
     @safe_slot("Failed to check mouse position")
     def check_mouse_position(self):
-        is_dragging = False
-        if sys.platform == "win32":
-            is_dragging = bool(ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000)
-        else:
-            is_dragging = bool(QApplication.mouseButtons() & Qt.LeftButton)
-
         cursor = QCursor.pos()
+        left_button_pressed = False
+        if sys.platform == "win32":
+            button_state = ctypes.windll.user32.GetAsyncKeyState(0x01)
+            left_button_down = bool(button_state & 0x8000)
+            # The low bit catches a short click that starts and ends between
+            # timer ticks; the high-bit edge covers a click held across a tick.
+            left_button_pressed = bool(button_state & 0x0001) or (
+                left_button_down and not self._left_mouse_button_was_down
+            )
+        else:
+            left_button_down = bool(QApplication.mouseButtons() & Qt.LeftButton)
+            left_button_pressed = (
+                left_button_down and not self._left_mouse_button_was_down
+            )
+        if left_button_down:
+            if not self._left_mouse_button_was_down:
+                self._left_mouse_press_pos = cursor
+            drag_distance = max(1, QApplication.startDragDistance())
+            is_dragging = (
+                self._left_mouse_press_pos is not None
+                and (cursor - self._left_mouse_press_pos).manhattanLength()
+                >= drag_distance
+            )
+        else:
+            is_dragging = False
+            self._left_mouse_press_pos = None
+        self._left_mouse_button_was_down = left_button_down
 
         if self.is_shelf_pinned or self._is_hiding:
             return
@@ -1965,7 +1997,12 @@ class MainWindow(QWidget):
                 self.auto_hide_timer.stop()
             return
             
-        if not self.show_on_hover_enabled and not is_dragging and not self.is_open:
+        if (
+            not self.show_on_hover_enabled
+            and not is_dragging
+            and not left_button_pressed
+            and not self.is_open
+        ):
             return
 
         self.update_screen_geometry("cursor")
@@ -2002,7 +2039,11 @@ class MainWindow(QWidget):
             self.trigger_left <= cursor.x() <= self.trigger_right
             and mouse_y <= hover_threshold
         )
-        if is_over_top_edge:
+        if is_over_top_edge and (
+            self.show_on_hover_enabled
+            or (self.show_on_click_enabled and left_button_pressed)
+            or is_dragging
+        ):
             self.show_shelf("cursor")
 
     def keep_shelf_open_after_context_action(self):

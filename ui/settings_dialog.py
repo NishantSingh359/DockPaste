@@ -313,6 +313,7 @@ class SettingsDialog(QDialog):
         self,
         *,
         show_on_hover,
+        show_on_click,
         hide_on_paste,
         highlight_shelf_on_drag,
         clip_scroll_speed,
@@ -338,6 +339,7 @@ class SettingsDialog(QDialog):
         history_loading=False,
         theme,
         on_show_on_hover,
+        on_show_on_click,
         on_hide_on_paste,
         on_highlight_shelf_on_drag,
         on_clip_scroll_speed,
@@ -416,6 +418,15 @@ class SettingsDialog(QDialog):
         self.show_on_hover = self._add_switch(
             general_card, "Show Shelf on Hover", "Reveal the shelf when you move to the top edge of the screen.", show_on_hover, on_show_on_hover
         )
+        self.show_on_click = self._add_switch(
+            general_card,
+            "Show Shelf on Click",
+            "Reveal the shelf when you left-click the top-edge trigger.",
+            show_on_click,
+            on_show_on_click,
+        )
+        self.show_on_hover.toggled.connect(self._update_click_setting_availability)
+        self._update_click_setting_availability(show_on_hover)
         self.hide_on_paste = self._add_switch(
             general_card, "Hide Shelf After Pasting", "Dismiss the shelf after you choose a clip.", hide_on_paste, on_hide_on_paste
         )
@@ -907,6 +918,15 @@ class SettingsDialog(QDialog):
     def set_history_loading(self, loading):
         if hasattr(self, "history_loading_status"):
             self.history_loading_status.setVisible(bool(loading))
+
+    def _update_click_setting_availability(self, hover_enabled):
+        click_enabled = not bool(hover_enabled)
+        self.show_on_click.setEnabled(click_enabled)
+        self.show_on_click.setToolTip(
+            "Turn off Show Shelf on Hover to configure click activation."
+            if not click_enabled
+            else "Reveal the shelf when you left-click the top-edge trigger."
+        )
 
     def _select_accent_color(self, color, callback):
         self._accent_color = color

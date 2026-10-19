@@ -62,6 +62,7 @@ class SettingSpec:
 
 SETTING_SPECS = {
     "show_on_hover_enabled": SettingSpec(bool, SHELF_SHOW_ON_HOVER),
+    "show_on_click_enabled": SettingSpec(bool, True),
     "hide_on_paste_enabled": SettingSpec(bool, HIDE_ON_PASTE),
     "highlight_shelf_on_drag_enabled": SettingSpec(bool, True),
     "clip_scroll_speed": SettingSpec(
