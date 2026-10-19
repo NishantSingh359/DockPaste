@@ -895,7 +895,14 @@ class SettingsDialog(QDialog):
         for button in self._accent_buttons.values():
             button.set_palette(p)
         self.setWindowTitle(appearance.WINDOW_TITLE)
-        self.setStyleSheet(appearance.settings_stylesheet(p))
+        stylesheet = appearance.settings_stylesheet(p)
+        self.setStyleSheet(stylesheet)
+        self.ensurePolished()
+        for widget in self.findChildren(QWidget):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+        self.update()
 
     def set_history_loading(self, loading):
         if hasattr(self, "history_loading_status"):

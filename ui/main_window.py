@@ -39,7 +39,6 @@ from PySide6.QtGui import (
 from PySide6.QtSvg import QSvgRenderer
 import ctypes
 import ctypes.wintypes
-import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -52,6 +51,7 @@ from core.clipboard_manager import ClipboardManager
 from core.dragdrop_handler import DragDropHandler
 from core.favicon_service import shutdown_favicon_service
 from core.paste_controller import PasteController
+from core.user_settings import UserSettingsStore
 from ui.chip_bar import ChipBar
 from ui.chip_widget import ChipContextMenu, ChipWidget
 from ui.settings_dialog import SettingsDialog
@@ -282,9 +282,18 @@ class MainWindow(QWidget):
         self._chip_position_animation_group = None
         self._chip_position_targets = {}
         self.theme_manager = ThemeManager()
-        self.theme_name = self._load_theme_name()
+        self._settings_store = UserSettingsStore(self._context_menu_settings_path())
+        self._persisted_settings = self._settings_store.load()
+        self.theme_name = self.theme_manager.get_theme(
+            self._persisted_settings["theme"]
+        )["name"]
         self.theme = self.theme_manager.get_theme(self.theme_name)
-        self.accent_color = self.theme.get("accent_options", [self.theme["settings"]["accent"]])[0]
+        accent_options = self.theme.get("accent_options", [])
+        saved_accent = self._persisted_settings["accent_color"].upper()
+        self.accent_color = next(
+            (value for value in accent_options if value.upper() == saved_accent),
+            accent_options[0] if accent_options else self.theme["settings"]["accent"],
+        )
         self.show_on_hover_enabled = SHELF_SHOW_ON_HOVER
         self.hide_on_paste_enabled = HIDE_ON_PASTE
         self.highlight_shelf_on_drag_enabled = True
@@ -1538,22 +1547,19 @@ class MainWindow(QWidget):
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         return settings_path
 
-    def _load_theme_name(self):
-        settings_path = self._context_menu_settings_path()
-        if not settings_path.exists():
-            return "dark"
-        try:
-            with settings_path.open("r", encoding="utf-8") as settings_file:
-                return self.theme_manager.get_theme(json.load(settings_file).get("theme", "dark"))["name"]
-        except Exception:
-            return "dark"
-
     def _apply_theme(self, theme_name):
         self.theme_name = self.theme_manager.get_theme(theme_name)["name"]
         self.theme = self.theme_manager.with_accent_color(
             self.theme_manager.get_theme(self.theme_name), self.accent_color
         )
         set_active_theme(self.theme_name)
+        # Refresh an open Settings window immediately so it cannot retain the
+        # previous palette while the shelf and its individual clips update.
+        if self._settings_dialog is not None:
+            try:
+                self._settings_dialog.set_theme(self.theme)
+            except RuntimeError:
+                self._settings_dialog = None
         if hasattr(self, "scroll"):
             self.scroll.set_theme(self.theme)
         if hasattr(self, "container"):
@@ -1562,13 +1568,13 @@ class MainWindow(QWidget):
             chip.set_theme(self.theme)
         if hasattr(self, "empty_label"):
             self._apply_empty_theme()
-        if self._settings_dialog is not None:
-            self._settings_dialog.set_theme(self.theme)
         if self._text_preview_dialog is not None:
             try:
                 self._text_preview_dialog.set_theme(self.theme)
             except RuntimeError:
                 self._text_preview_dialog = None
+        if self._oversized_item_popup is not None and self._oversized_item_popup.isVisible():
+            self._oversized_item_popup.set_theme(self.theme)
         if hasattr(self, "tray_icon") and hasattr(self, "_tray_menu_actions"):
             tray_menu_ui.style_menu(
                 self.tray_icon.contextMenu(),
@@ -1609,6 +1615,13 @@ class MainWindow(QWidget):
             return
         self.theme_name = theme_name
         self.theme = self.theme_manager.get_theme(theme_name)
+        accent_options = self.theme.get("accent_options", [])
+        if self.accent_color.upper() not in {value.upper() for value in accent_options}:
+            self.accent_color = (
+                accent_options[0]
+                if accent_options
+                else self.theme["settings"]["accent"]
+            )
         self._apply_theme(theme_name)
         self._save_context_menu_settings()
 
@@ -1625,122 +1638,69 @@ class MainWindow(QWidget):
         self._save_context_menu_settings()
 
     def _load_context_menu_settings(self):
-        settings_path = self._context_menu_settings_path()
-        if not settings_path.exists():
-            return
-
         try:
-            with settings_path.open("r", encoding="utf-8") as settings_file:
-                settings = json.load(settings_file)
+            settings = self._persisted_settings
             needs_sizing_defaults_migration = (
                 settings.get("chip_width_defaults_version", 0) < CHIP_WIDTH_DEFAULTS_VERSION
             )
-            self.show_on_hover_enabled = bool(settings.get("show_on_hover_enabled", self.show_on_hover_enabled))
-            self.hide_on_paste_enabled = bool(settings.get("hide_on_paste_enabled", self.hide_on_paste_enabled))
-            self.highlight_shelf_on_drag_enabled = bool(
-                settings.get(
-                    "highlight_shelf_on_drag_enabled",
-                    self.highlight_shelf_on_drag_enabled,
-                )
-            )
-            self.clip_scroll_speed = max(
-                CHIP_SCROLL_SPEED_MIN,
-                min(
-                    CHIP_SCROLL_SPEED_MAX,
-                    int(settings.get("clip_scroll_speed", self.clip_scroll_speed)),
-                ),
-            )
-            self.clip_indexing_enabled = bool(settings.get("clip_indexing_enabled", self.clip_indexing_enabled))
-            self.color_preview_enabled = bool(settings.get("color_preview_enabled", self.color_preview_enabled))
-            self.text_preview_on_double_click_enabled = bool(
-                settings.get(
-                    "text_preview_on_double_click_enabled",
-                    self.text_preview_on_double_click_enabled,
-                )
-            )
-            self.open_images_on_double_click_enabled = bool(
-                settings.get(
-                    "open_images_on_double_click_enabled",
-                    self.open_images_on_double_click_enabled,
-                )
-            )
-            self.prevent_oversize_items_enabled = bool(
-                settings.get("prevent_oversize_items_enabled", self.prevent_oversize_items_enabled)
-            )
-            self.show_oversize_warning_enabled = self.prevent_oversize_items_enabled and bool(
-                settings.get("show_oversize_warning_enabled", self.show_oversize_warning_enabled)
-            )
-            self.close_to_tray_enabled = bool(settings.get("close_to_tray_enabled", self.close_to_tray_enabled))
-            self.start_with_windows_enabled = bool(settings.get("start_with_windows_enabled", self.start_with_windows_enabled))
+            self.show_on_hover_enabled = settings["show_on_hover_enabled"]
+            self.hide_on_paste_enabled = settings["hide_on_paste_enabled"]
+            self.highlight_shelf_on_drag_enabled = settings["highlight_shelf_on_drag_enabled"]
+            self.clip_scroll_speed = settings["clip_scroll_speed"]
+            self.clip_indexing_enabled = settings["clip_indexing_enabled"]
+            self.color_preview_enabled = settings["color_preview_enabled"]
+            self.text_preview_on_double_click_enabled = settings["text_preview_on_double_click_enabled"]
+            self.open_images_on_double_click_enabled = settings["open_images_on_double_click_enabled"]
+            self.prevent_oversize_items_enabled = settings["prevent_oversize_items_enabled"]
+            self.show_oversize_warning_enabled = settings["show_oversize_warning_enabled"]
+            self.close_to_tray_enabled = settings["close_to_tray_enabled"]
+            self.start_with_windows_enabled = settings["start_with_windows_enabled"]
             self.theme_name = self.theme_manager.get_theme(settings.get("theme", self.theme_name))["name"]
             self.theme = self.theme_manager.get_theme(self.theme_name)
             accent_options = self.theme.get("accent_options", [])
-            saved_accent = str(settings.get("accent_color", self.accent_color)).upper()
+            saved_accent = settings["accent_color"].upper()
             self.accent_color = (
                 saved_accent if saved_accent in {value.upper() for value in accent_options}
                 else (accent_options[0] if accent_options else self.theme["settings"]["accent"])
             )
-            self.history_retention_days = max(
-                CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
-                min(
-                    CLIPBOARD_HISTORY_RETENTION_MAX_DAYS,
-                    int(settings.get("history_retention_days", self.history_retention_days)),
-                ),
-            )
-            chip_theme = self.theme.get("chip", {})
+            self.history_retention_days = settings["history_retention_days"]
             if needs_sizing_defaults_migration:
                 self.chip_min_width = CHIP_MIN_WIDTH
                 self.chip_max_width = CHIP_MAX_WIDTH
                 self.shelf_width_ratio = SHELF_WIDTH_RATIO
             else:
-                self.chip_min_width = max(
-                    CHIP_WIDTH_MIN_LIMIT,
-                    min(CHIP_WIDTH_MAX_LIMIT, int(settings.get("chip_min_width", self.chip_min_width))),
-                )
-                self.chip_max_width = max(
-                    self.chip_min_width,
-                    min(CHIP_WIDTH_MAX_LIMIT, int(settings.get("chip_max_width", self.chip_max_width))),
-                )
-                self.shelf_width_ratio = max(
-                    SHELF_WIDTH_RATIO_MIN,
-                    min(SHELF_WIDTH_RATIO_MAX, float(settings.get("shelf_width_ratio", self.shelf_width_ratio))),
-                )
+                self.chip_min_width = settings["chip_min_width"]
+                self.chip_max_width = settings["chip_max_width"]
+                self.shelf_width_ratio = settings["shelf_width_ratio"]
             if needs_sizing_defaults_migration:
                 self._save_context_menu_settings()
         except Exception as exc:
             log_exception(f"Failed to load context menu settings: {exc}")
 
     def _save_context_menu_settings(self):
-        settings_path = self._context_menu_settings_path()
-        try:
-            with settings_path.open("w", encoding="utf-8") as settings_file:
-                json.dump(
-                    {
-                        "show_on_hover_enabled": self.show_on_hover_enabled,
-                        "hide_on_paste_enabled": self.hide_on_paste_enabled,
-                        "highlight_shelf_on_drag_enabled": self.highlight_shelf_on_drag_enabled,
-                        "clip_scroll_speed": self.clip_scroll_speed,
-                        "clip_indexing_enabled": self.clip_indexing_enabled,
-                        "color_preview_enabled": self.color_preview_enabled,
-                        "text_preview_on_double_click_enabled": self.text_preview_on_double_click_enabled,
-                        "open_images_on_double_click_enabled": self.open_images_on_double_click_enabled,
-                        "prevent_oversize_items_enabled": self.prevent_oversize_items_enabled,
-                        "show_oversize_warning_enabled": self.show_oversize_warning_enabled,
-                        "close_to_tray_enabled": self.close_to_tray_enabled,
-                        "start_with_windows_enabled": self.start_with_windows_enabled,
-                        "chip_min_width": self.chip_min_width,
-                        "chip_max_width": self.chip_max_width,
-                        "history_retention_days": self.history_retention_days,
-                        "shelf_width_ratio": self.shelf_width_ratio,
-                        "theme": self.theme_name,
-                        "accent_color": self.accent_color,
-                        "chip_width_defaults_version": CHIP_WIDTH_DEFAULTS_VERSION,
-                    },
-                    settings_file,
-                    indent=2,
-                )
-        except Exception as exc:
-            log_exception(f"Failed to save context menu settings: {exc}")
+        self._persisted_settings = self._settings_store.save(
+            {
+                "show_on_hover_enabled": self.show_on_hover_enabled,
+                "hide_on_paste_enabled": self.hide_on_paste_enabled,
+                "highlight_shelf_on_drag_enabled": self.highlight_shelf_on_drag_enabled,
+                "clip_scroll_speed": self.clip_scroll_speed,
+                "clip_indexing_enabled": self.clip_indexing_enabled,
+                "color_preview_enabled": self.color_preview_enabled,
+                "text_preview_on_double_click_enabled": self.text_preview_on_double_click_enabled,
+                "open_images_on_double_click_enabled": self.open_images_on_double_click_enabled,
+                "prevent_oversize_items_enabled": self.prevent_oversize_items_enabled,
+                "show_oversize_warning_enabled": self.show_oversize_warning_enabled,
+                "close_to_tray_enabled": self.close_to_tray_enabled,
+                "start_with_windows_enabled": self.start_with_windows_enabled,
+                "chip_min_width": self.chip_min_width,
+                "chip_max_width": self.chip_max_width,
+                "history_retention_days": self.history_retention_days,
+                "shelf_width_ratio": self.shelf_width_ratio,
+                "theme": self.theme_name,
+                "accent_color": self.accent_color,
+                "chip_width_defaults_version": CHIP_WIDTH_DEFAULTS_VERSION,
+            }
+        )
 
     def _create_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(create_app_icon(), self)

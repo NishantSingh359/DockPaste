@@ -54,6 +54,25 @@ class OversizedItemPopup(QWidget):
         self._timer.timeout.connect(self.hide)
 
     def show_notice(self, theme):
+        self.set_theme(theme)
+        notification = theme.get("notification", {})
+
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.move(
+                QPoint(
+                    available.right() - self.width() - ui_config.NOTIFICATION["screen_edge_margin"],
+                    available.bottom() - self.height() - ui_config.NOTIFICATION["screen_edge_margin"],
+                )
+            )
+
+        self.show()
+        self.raise_()
+        self._timer.start(max(1000, int(notification.get("duration_ms", 4500))))
+
+    def set_theme(self, theme):
+        """Update the popup palette and geometry without showing it."""
         notification = theme.get("notification", {})
         background = notification.get("background", "#282a2e")
         text = notification.get("text", "#f1f1f1")
@@ -100,17 +119,3 @@ class OversizedItemPopup(QWidget):
             )
         )
         self.adjustSize()
-
-        screen = QApplication.primaryScreen()
-        if screen is not None:
-            available = screen.availableGeometry()
-            self.move(
-                QPoint(
-                    available.right() - self.width() - ui_config.NOTIFICATION["screen_edge_margin"],
-                    available.bottom() - self.height() - ui_config.NOTIFICATION["screen_edge_margin"],
-                )
-            )
-
-        self.show()
-        self.raise_()
-        self._timer.start(max(1000, int(notification.get("duration_ms", 4500))))
