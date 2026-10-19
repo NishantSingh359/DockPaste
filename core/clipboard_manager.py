@@ -29,7 +29,7 @@ from PySide6.QtGui import QImage, QPixmap, QClipboard
 from core.image_store import ImageStore
 from core.database import ClipboardDatabase
 from config import MAX_CLIP_ITEM_SIZE_BYTES
-from utils.app_logging import log_exception, safe_slot
+from utils.app_logging import get_logger, log_exception, safe_slot
 from utils.item_limits import is_oversized_file, is_oversized_text
 
 PASTE_IMAGE_CACHE_MAX_BYTES = 48 * 1024 * 1024
@@ -140,6 +140,7 @@ class ClipboardManager(QObject):
         self._last_text = ""
         self._last_image_cache_key = None
         self._last_image_hash = None
+        self._last_notified_clipboard_sequence = None
         self._pending_image_hashes = set()
         self._ignored_image_hashes = {}
         self._ignored_image_fingerprints = []
@@ -560,6 +561,11 @@ class ClipboardManager(QObject):
         # Design tools often publish several clipboard formats in sequence.
         # Wait for the burst to settle, then inspect the final MIME payload once.
         if self.sender() is self.clipboard:
+            sequence = self._windows_clipboard_sequence_number()
+            if sequence is not None:
+                if sequence == self._last_notified_clipboard_sequence:
+                    return
+                self._last_notified_clipboard_sequence = sequence
             self._clipboard_change_timer.start()
             return
 
@@ -568,12 +574,17 @@ class ClipboardManager(QObject):
 
     @safe_slot("Failed to process clipboard change")
     def _process_clipboard_change(self):
-
+        sequence = self._windows_clipboard_sequence_number()
         mime = self.clipboard.mimeData()
         html_link = self._single_copied_html_link(mime)
         # Prefer actual clipboard image data over its source URL. Some browsers
         # expose only the source URL, handled by the remote image path below.
         if mime.hasImage():
+            owner_name = self._windows_clipboard_owner_name()
+            formats = tuple(
+                name.decode("utf-8", errors="replace") if isinstance(name, bytes) else str(name)
+                for name in mime.formats()
+            )
             image = self.clipboard.image()
             if image.isNull():
                 self._clipboard_image_snapshot = None
@@ -629,6 +640,7 @@ class ClipboardManager(QObject):
                 False,
                 source_size_bytes,
                 rich_formats,
+                (sequence, owner_name, formats),
             )
             return
 
@@ -985,7 +997,8 @@ class ClipboardManager(QObject):
             return {}
 
     def _process_image(
-        self, image, image_hash=None, reserved=False, source_size_bytes=None, rich_formats=None
+        self, image, image_hash=None, reserved=False, source_size_bytes=None, rich_formats=None,
+        clipboard_metadata=None,
     ):
         try:
             image_cache_key = image.cacheKey()
@@ -1002,6 +1015,15 @@ class ClipboardManager(QObject):
             with self._image_lock:
                 if image_hash == self._last_image_hash:
                     self._pending_image_hashes.discard(image_hash)
+                    if clipboard_metadata:
+                        sequence, owner_name, formats = clipboard_metadata
+                        get_logger().info(
+                            "Ignored exact duplicate image clipboard update "
+                            "(sequence=%s, owner=%s, formats=%s)",
+                            sequence,
+                            owner_name or "unknown",
+                            ", ".join(formats) or "none",
+                        )
                     return
                 if not reserved and image_hash in self._pending_image_hashes:
                     return
@@ -1046,6 +1068,72 @@ class ClipboardManager(QObject):
             return None
         data = bytes(buffer.data())
         return sha256(data).hexdigest()
+
+    @staticmethod
+    def _windows_clipboard_sequence_number():
+        """Return Windows' sequence number for the current clipboard contents."""
+        if os.name != "nt":
+            return None
+        try:
+            user32 = ctypes.windll.user32
+            user32.GetClipboardSequenceNumber.restype = ctypes.c_uint
+            return int(user32.GetClipboardSequenceNumber())
+        except (AttributeError, OSError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _windows_clipboard_owner_name():
+        """Return the executable name of the process that last set the clipboard."""
+        if os.name != "nt":
+            return None
+
+        process_handle = None
+        try:
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            user32.GetClipboardOwner.restype = ctypes.c_void_p
+            user32.GetWindowThreadProcessId.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_ulong),
+            ]
+            user32.GetWindowThreadProcessId.restype = ctypes.c_ulong
+            kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.QueryFullProcessImageNameW.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.c_wchar_p,
+                ctypes.POINTER(ctypes.c_ulong),
+            ]
+            kernel32.QueryFullProcessImageNameW.restype = ctypes.c_int
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel32.CloseHandle.restype = ctypes.c_int
+
+            owner_window = user32.GetClipboardOwner()
+            if not owner_window:
+                return None
+            process_id = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(owner_window, ctypes.byref(process_id))
+            if not process_id.value:
+                return None
+            process_handle = kernel32.OpenProcess(0x1000, False, process_id.value)
+            if not process_handle:
+                return None
+            executable_path = ctypes.create_unicode_buffer(32768)
+            path_length = ctypes.c_ulong(len(executable_path))
+            if not kernel32.QueryFullProcessImageNameW(
+                process_handle, 0, executable_path, ctypes.byref(path_length)
+            ):
+                return None
+            return os.path.basename(executable_path.value)
+        except (AttributeError, OSError, TypeError, ValueError):
+            return None
+        finally:
+            if process_handle:
+                try:
+                    ctypes.windll.kernel32.CloseHandle(process_handle)
+                except (AttributeError, OSError):
+                    pass
 
     def _load_paste_image(self, image_path):
         """Load and hash a saved image once, reusing recent decoded images."""
