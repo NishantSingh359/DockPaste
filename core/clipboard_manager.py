@@ -141,10 +141,12 @@ class ClipboardManager(QObject):
         self._last_image_cache_key = None
         self._last_image_hash = None
         self._last_notified_clipboard_sequence = None
+        self._clipboard_image_epoch = 0
         self._internal_clipboard_sequences = set()
         self._internal_clipboard_write = False
         self._internal_clipboard_signal_seen = False
         self._pending_image_hashes = set()
+        self._pending_image_updates = {}
         self._ignored_image_hashes = {}
         self._ignored_image_fingerprints = []
         self._ignore_snipping_tool_until = 0.0
@@ -629,9 +631,18 @@ class ClipboardManager(QObject):
         sequence = self._windows_clipboard_sequence_number()
         mime = self.clipboard.mimeData()
         html_link = self._single_copied_html_link(mime)
+        has_image_payload = mime.hasImage()
+        image_url = (
+            None if has_image_payload else self._clipboard_image_source_url(mime)
+        )
+        if not has_image_payload and not image_url:
+            # Consecutive image notifications can be duplicate representations
+            # of one capture. A non-image clipboard item breaks that run, so a
+            # later intentional recopy of the same image remains a new copy.
+            self._clipboard_image_epoch += 1
         # Prefer actual clipboard image data over its source URL. Some browsers
         # expose only the source URL, handled by the remote image path below.
-        if mime.hasImage():
+        if has_image_payload:
             owner_name = self._windows_clipboard_owner_name()
             formats = tuple(
                 name.decode("utf-8", errors="replace") if isinstance(name, bytes) else str(name)
@@ -642,7 +653,6 @@ class ClipboardManager(QObject):
                 self._clipboard_image_snapshot = None
                 self._clipboard_image_snapshot_hash = None
                 self._clipboard_rich_formats_snapshot = {}
-                image_url = self._clipboard_image_source_url(mime)
                 if image_url:
                     self._queue_remote_image(image_url)
                     return
@@ -696,12 +706,11 @@ class ClipboardManager(QObject):
                 False,
                 source_size_bytes,
                 rich_formats,
-                (sequence, owner_name, formats),
+                (sequence, owner_name, formats, self._clipboard_image_epoch),
                 reserved_path,
             )
             return
 
-        image_url = self._clipboard_image_source_url(mime)
         if image_url:
             self._queue_remote_image(image_url)
             return
@@ -1099,6 +1108,7 @@ class ClipboardManager(QObject):
         clipboard_metadata=None, reserved_path=None,
     ):
         stored = False
+        owns_pending_hash = False
         try:
             image_cache_key = image.cacheKey()
             image_hash = image_hash or self._hash_image(image)
@@ -1113,9 +1123,8 @@ class ClipboardManager(QObject):
 
             with self._image_lock:
                 if image_hash == self._last_image_hash:
-                    self._pending_image_hashes.discard(image_hash)
                     if clipboard_metadata:
-                        sequence, owner_name, formats = clipboard_metadata
+                        sequence, owner_name, formats = clipboard_metadata[:3]
                         get_logger().info(
                             "Ignored exact duplicate image clipboard update "
                             "(sequence=%s, owner=%s, formats=%s)",
@@ -1125,8 +1134,22 @@ class ClipboardManager(QObject):
                         )
                     return
                 if not reserved and image_hash in self._pending_image_hashes:
+                    # Keep the latest matching clipboard update until the
+                    # original worker finishes. This lets it mark the hash as
+                    # current even if its own cache key is already stale.
+                    sequence = clipboard_metadata[0] if clipboard_metadata else None
+                    self._pending_image_updates[image_hash] = (
+                        sequence,
+                        image_cache_key,
+                    )
                     return
                 self._pending_image_hashes.add(image_hash)
+                owns_pending_hash = True
+                sequence = clipboard_metadata[0] if clipboard_metadata else None
+                self._pending_image_updates[image_hash] = (
+                    sequence,
+                    image_cache_key,
+                )
 
             image_path = self.image_store.save_image(
                 image,
@@ -1158,8 +1181,24 @@ class ClipboardManager(QObject):
             if reserved_path is not None:
                 with self._reserved_image_records_lock:
                     self._reserved_image_records.pop(reserved_path, None)
-            if image_cache_key == self._last_image_cache_key:
-                with self._image_lock:
+            with self._image_lock:
+                latest_update = self._pending_image_updates.get(image_hash)
+                latest_update_is_current = latest_update is not None and (
+                    latest_update[1] == self._last_image_cache_key
+                    or (
+                        latest_update[0] is not None
+                        and latest_update[0] == self._last_notified_clipboard_sequence
+                    )
+                )
+                if (
+                    clipboard_metadata is None
+                    or image_cache_key == self._last_image_cache_key
+                    or latest_update_is_current
+                    or (
+                        len(clipboard_metadata) > 3
+                        and clipboard_metadata[3] == self._clipboard_image_epoch
+                    )
+                ):
                     self._last_image_hash = image_hash
             snapshot = self._clipboard_image_snapshot
             if snapshot is not None and image_cache_key == snapshot.cacheKey():
@@ -1168,9 +1207,10 @@ class ClipboardManager(QObject):
         except Exception:
             log_exception("Failed to process clipboard image")
         finally:
-            if image_hash:
+            if image_hash and owns_pending_hash:
                 with self._image_lock:
                     self._pending_image_hashes.discard(image_hash)
+                    self._pending_image_updates.pop(image_hash, None)
             if reserved_path is not None and not stored:
                 self._discard_reserved_image_record(reserved_path)
 
