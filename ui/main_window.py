@@ -956,6 +956,7 @@ class MainWindow(QWidget):
         self.chip_layout.addStretch()
         self.scroll.horizontalScrollBar().setValue(old_scroll)
         self._schedule_history_virtualization()
+        self.update_empty_state()
 
     def _upsert_loaded_history_record(self, content, clip_date, clip_index, pinned):
         if clip_date != self._history_date_filter or self._history_loading:
@@ -1067,9 +1068,11 @@ class MainWindow(QWidget):
         self._refresh_clip_indexes_for_date(clip_date)
 
     def remove_chip_widget(self, chip):
-        self._remove_chip_widgets([chip])
+        # remove_clip rebuilds/virtualizes the history layout immediately after
+        # this returns. Avoid running position animations against that rebuild.
+        self._remove_chip_widgets([chip], animate=False)
 
-    def _remove_chip_widgets(self, chips):
+    def _remove_chip_widgets(self, chips, animate=True):
         chips = [chip for chip in chips if not getattr(chip, "_is_deleting", False)]
         if not chips:
             return
@@ -1092,7 +1095,10 @@ class MainWindow(QWidget):
         self.chip_layout.activate()
         self.update_empty_state()
         self.refresh_chip_indexes()
-        self._animate_chip_layout(start_positions, CHIP_LAYOUT_ANIMATION_MS)
+        self._animate_chip_layout(
+            start_positions,
+            CHIP_LAYOUT_ANIMATION_MS if animate else 0,
+        )
 
     @staticmethod
     def _finish_chip_fade_in(chip):
