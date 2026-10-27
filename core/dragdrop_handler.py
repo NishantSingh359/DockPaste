@@ -6,7 +6,7 @@ from core.image_store import ImageStore
 from core.database import ClipboardDatabase, detect_type
 from config import MAX_CLIP_ITEM_SIZE_BYTES
 from utils.app_logging import log_exception
-from utils.item_limits import is_oversized_file, is_oversized_text
+from utils.item_limits import is_oversized_image_file, is_oversized_text
 
 
 
@@ -49,7 +49,7 @@ class DragDropHandler:
                     # keep only filesystem paths
                     p = Path(it)
                     if p.exists() and (p.is_file() or p.is_dir()):
-                        if self.enforce_size_limit and is_oversized_file(p):
+                        if self.enforce_size_limit and is_oversized_image_file(p):
                             self.oversized_item_rejected = True
                             continue
                         self._store_item(it, "path")

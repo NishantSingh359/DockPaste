@@ -2,14 +2,21 @@ from pathlib import Path
 
 from config import MAX_CLIP_ITEM_SIZE_BYTES
 
+IMAGE_FILE_SUFFIXES = {
+    ".avif", ".bmp", ".gif", ".heic", ".heif", ".jfif", ".jpe",
+    ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp",
+}
 
-def is_oversized_file(path):
-    """Check a file against the clipboard limit; folders are stored as paths."""
+
+def is_oversized_image_file(path):
+    """Apply the clipboard size limit to image files stored as paths."""
     try:
         candidate = Path(path)
-        if candidate.is_file():
-            return candidate.stat().st_size > MAX_CLIP_ITEM_SIZE_BYTES
-        return False
+        return (
+            candidate.is_file()
+            and candidate.suffix.casefold() in IMAGE_FILE_SUFFIXES
+            and candidate.stat().st_size > MAX_CLIP_ITEM_SIZE_BYTES
+        )
     except OSError:
         return False
 

@@ -543,10 +543,10 @@ class SettingsDialog(QDialog):
             general_card, "Open Images on Double-Click", "Open the copied image in your image viewer.", open_images_on_double_click, on_open_images_on_double_click
         )
         self.prevent_oversize_items = self._add_switch(
-            general_card, "Skip Items Over 5 MB", "Keep large clipboard items out of local history.", prevent_oversize_items, on_prevent_oversize_items
+            general_card, "Skip Image Over 5 MB", "Keep large clipboard items out of local history.", prevent_oversize_items, on_prevent_oversize_items
         )
         self.oversize_warning = self._add_switch(
-            general_card, "Warn When an Item Is Skipped", "Show a notice when an item exceeds the size limit.", show_oversize_warning, on_oversize_warning
+            general_card, "Warn When an Image Is Skipped", "Show a notice when an item exceeds the size limit.", show_oversize_warning, on_oversize_warning
         )
         self.oversize_warning.setEnabled(bool(prevent_oversize_items))
         self.prevent_oversize_items.toggled.connect(self._set_oversize_warning_availability)

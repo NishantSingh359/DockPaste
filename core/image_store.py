@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
 from PySide6.QtGui import QImage, QPixmap
 
 from config import (
@@ -109,16 +109,35 @@ class ImageStore:
         return None
 
     def image_payload_size(self, image_data, mime_data=None):
-        """Return the largest available image payload size in bytes.
-
-        Decoded image memory is included because compressed clipboard formats
-        can be much smaller than the QImage the app must process.
-        """
+        """Return encoded image bytes, not the decoded pixel buffer size."""
         image = self._as_image(image_data)
         if image is None or image.isNull():
             return None
 
-        sizes = [self._size_in_bytes(image)]
+        encoded_size = self.encoded_mime_payload_size(mime_data) if mime_data else None
+        if encoded_size is not None:
+            return encoded_size
+
+        # Some clipboard providers expose only a decoded QImage. Encode it to
+        # PNG so the caller applies the limit to persisted data, not raw pixels.
+        encoded = QByteArray()
+        buffer = QBuffer(encoded)
+        if not buffer.open(QIODevice.WriteOnly):
+            return None
+        try:
+            if not image.save(buffer, "PNG"):
+                return None
+            return encoded.size()
+        finally:
+            buffer.close()
+
+    @staticmethod
+    def encoded_mime_payload_size(mime_data):
+        """Find an encoded image payload, including Windows clipboard PNG."""
+        if mime_data is None:
+            return None
+
+        sizes = []
         if mime_data is not None:
             try:
                 for mime_type in mime_data.formats():
@@ -129,7 +148,11 @@ class ImageStore:
                             format_name = bytes(mime_type).decode("ascii", errors="ignore")
                         except (TypeError, ValueError):
                             format_name = str(mime_type)
-                    if not format_name.lower().startswith("image/"):
+                    normalized = format_name.lower()
+                    if not (
+                        normalized.startswith("image/")
+                        or ("windows-mime" in normalized and "png" in normalized)
+                    ):
                         continue
                     payload = bytes(mime_data.data(mime_type))
                     if payload:
@@ -137,7 +160,7 @@ class ImageStore:
             except Exception:
                 log_exception("Failed to inspect encoded image data")
 
-        return max(sizes)
+        return max(sizes) if sizes else None
 
     def _as_image(self, image_data):
         if isinstance(image_data, QImage):
