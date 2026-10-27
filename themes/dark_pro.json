@@ -56,8 +56,8 @@
     "destructive_icon_color": "#007AFF"
   },
   "empty": {
-    "text_color": "#667187",
-    "icon_color": "#667187"
+    "text_color": "#696969",
+    "icon_color": "#696969"
   },
   "preview": {
     "background": "rgba(44, 49, 60, 0.45)",
