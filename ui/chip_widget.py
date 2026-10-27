@@ -1059,8 +1059,7 @@ class ChipWidget(QWidget):
 
     def _start_drag(self):
         drag = QDrag(self)
-        include_file_url = bool(QApplication.keyboardModifiers() & Qt.ControlModifier)
-        mime_data = self.create_drag_mime_data(include_file_url=include_file_url)
+        mime_data = self.create_drag_mime_data(include_file_url=True)
         drag.setMimeData(mime_data)
         drag.setPixmap(self.grab())
         drag.exec(Qt.CopyAction | Qt.MoveAction)
@@ -1069,11 +1068,17 @@ class ChipWidget(QWidget):
         mime_data = QMimeData()
         mime_data.setData("application/x-copypin-chip", b"1")
         if self.kind == "IMG":
-            image = QImage(self.content)
+            image_path = Path(self.content)
+            if include_file_url and image_path.is_file():
+                mime_data.setUrls([QUrl.fromLocalFile(str(image_path.resolve()))])
+
+            image = QImage(str(image_path))
             if not image.isNull():
                 buffer = QBuffer()
                 buffer.open(QIODevice.WriteOnly)
-                image.save(buffer, "PNG")
+                if not image.save(buffer, "PNG"):
+                    buffer.close()
+                    return mime_data
                 png_data = bytes(buffer.data())
                 buffer.close()
 
@@ -1081,10 +1086,6 @@ class ChipWidget(QWidget):
                 mime_data.setData("image/png", png_data)
                 encoded_image = b64encode(png_data).decode("ascii")
                 mime_data.setHtml(f'<img src="data:image/png;base64,{encoded_image}">')
-                if include_file_url and Path(self.content).exists():
-                    image_url = QUrl.fromLocalFile(self.content)
-                    mime_data.setUrls([image_url])
-                    mime_data.setData("text/uri-list", image_url.toString().encode("utf-8"))
                 return mime_data
 
         mime_data.setText(self.content)
@@ -1106,9 +1107,8 @@ class ChipWidget(QWidget):
         elif self.kind == "PATH":
             mime_data.setUrls([QUrl.fromLocalFile(self.content)])
             mime_data.setData("text/uri-list", QUrl.fromLocalFile(self.content).toString().encode("utf-8"))
-        elif self.kind == "IMG" and Path(self.content).exists():
-            mime_data.setUrls([QUrl.fromLocalFile(self.content)])
-            mime_data.setData("text/uri-list", QUrl.fromLocalFile(self.content).toString().encode("utf-8"))
+        elif self.kind == "IMG" and include_file_url and Path(self.content).is_file():
+            mime_data.setUrls([QUrl.fromLocalFile(str(Path(self.content).resolve()))])
 
         return mime_data
 
