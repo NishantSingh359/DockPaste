@@ -1,3 +1,5 @@
+from datetime import date
+
 from PySide6.QtCore import QEasingCurve, QPoint, QRect, Property, QPropertyAnimation, QSize, Qt, Signal, QByteArray, QUrl
 from PySide6.QtGui import QDesktopServices, QColor, QFont, QFontDatabase, QIcon, QLinearGradient, QPainter, QPen
 from PySide6.QtSvg import QSvgRenderer
@@ -18,7 +20,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QSlider,
     QStackedWidget,
+    QStyle,
+    QStyleOptionSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -395,6 +400,50 @@ class SettingsDoubleSpinBox(QDoubleSpinBox):
         super().wheelEvent(event)
 
 
+class HistoryDateSlider(QSlider):
+    """Discrete date slider with a visible marker for every available date."""
+
+    def __init__(self, palette, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self._date_palette = palette
+
+    def set_palette(self, palette):
+        self._date_palette = palette
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        option = QStyleOptionSlider()
+        self.initStyleOption(option)
+        groove = self.style().subControlRect(
+            QStyle.ComplexControl.CC_Slider, option,
+            QStyle.SubControl.SC_SliderGroove, self,
+        )
+        handle = self.style().subControlRect(
+            QStyle.ComplexControl.CC_Slider, option,
+            QStyle.SubControl.SC_SliderHandle, self,
+        )
+        left = groove.left() + handle.width() / 2
+        right = groove.right() - handle.width() / 2
+        if right <= left:
+            return
+        center_y = groove.center().y()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor(self._date_palette["secondary_text"]), 8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPoint(round(left), center_y), QPoint(round(right), center_y))
+        painter.setPen(Qt.PenStyle.NoPen)
+        span = self.maximum() - self.minimum()
+        for index in range(self.minimum(), self.maximum() + 1):
+            ratio = (index - self.minimum()) / span if span else 0.5
+            x = left + ratio * (right - left)
+            active = index == self.value()
+            radius = 12 if active else 8
+            color = self._date_palette["accent"] if active else self._date_palette["secondary_text"]
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(QPoint(round(x), center_y), radius, radius)
+
+
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -690,15 +739,39 @@ class SettingsDialog(QDialog):
 
         history = self._new_page("History", "Manage saved clipboard history.")
         history_card = self._card(history)
-        self.history_date_combo = MacComboBox(self._theme_palette)
-        for history_date in history_dates:
-            self.history_date_combo.addItem(history_date, history_date)
-        selected_index = self.history_date_combo.findData(selected_history_date)
-        self.history_date_combo.setCurrentIndex(max(0, selected_index))
-        self.history_date_combo.currentIndexChanged.connect(
-            lambda index: on_history_date(self.history_date_combo.itemData(index))
+        self.history_dates = list(history_dates) or [selected_history_date]
+        date_control = QWidget()
+        date_layout = QVBoxLayout(date_control)
+        date_layout.setContentsMargins(0, 0, 0, 0)
+        date_layout.setSpacing(4)
+        self.history_date_label = QLabel()
+        self.history_date_label.setObjectName("browseDateValue")
+        self.history_date_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.history_date_slider = HistoryDateSlider(self._theme_palette)
+        self.history_date_slider.setObjectName("historyDateSlider")
+        self.history_date_slider.setRange(0, max(0, len(self.history_dates) - 1))
+        self.history_date_slider.setTracking(True)
+        selected_index = self.history_dates.index(selected_history_date) if selected_history_date in self.history_dates else 0
+        self.history_date_slider.setValue(selected_index)
+        self._update_history_date_label(selected_index)
+        self.history_date_slider.valueChanged.connect(
+            lambda index: (self._update_history_date_label(index), on_history_date(self.history_dates[index]))
         )
-        self._add_control_row(history_card, "Browse Copy Date", "Show clips copied on this date.", self.history_date_combo)
+        date_layout.addWidget(self.history_date_label)
+        date_layout.addWidget(self.history_date_slider)
+        date_row = QWidget()
+        date_row_layout = QVBoxLayout(date_row)
+        date_row_layout.setContentsMargins(0, 18, 0, 18)
+        date_row_layout.setSpacing(2)
+        date_title = QLabel("Browse Copy Date")
+        date_title.setObjectName("browseDateTitle")
+        date_description = QLabel("Adjust slider and see the copied history.")
+        date_description.setObjectName("browseDateDescription")
+        date_row_layout.addWidget(date_title)
+        date_row_layout.addWidget(date_description)
+        date_row_layout.addSpacing(2)
+        date_row_layout.addWidget(date_control)
+        self._add_row(history_card, date_row)
         self.history_retention_days = self._spin(
             history_retention_days,
             CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
@@ -842,6 +915,14 @@ class SettingsDialog(QDialog):
                 available_geometry.center().x() - self.width() // 2,
                 available_geometry.center().y() - self.height() // 2,
             )
+
+    def _update_history_date_label(self, index):
+        history_date = self.history_dates[index]
+        try:
+            history_date = date.fromisoformat(history_date).strftime("%y-%m-%d")
+        except (TypeError, ValueError):
+            pass
+        self.history_date_label.setText(history_date)
 
     def _new_page(self, title, subtitle):
         page = QWidget()
@@ -999,6 +1080,8 @@ class SettingsDialog(QDialog):
         # Settings share the active theme's colors while keeping their own layout.
         p = {**self._theme_palette, **(theme or {}).get("settings", {})}
         self._theme_palette = p
+        if hasattr(self, "history_date_slider"):
+            self.history_date_slider.set_palette(p)
         for row in self.findChildren(SettingsNavRow):
             row.set_colors(QColor(p["accent"]), QColor(p["surface_hover"]), QColor(p["text"]))
         for icon in self.findChildren(SettingsNavIcon):

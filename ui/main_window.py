@@ -87,6 +87,7 @@ from config import (
     CLIPBOARD_HISTORY_RETENTION_DAYS,
     CLIPBOARD_HISTORY_RETENTION_MAX_DAYS,
     CLIPBOARD_HISTORY_RETENTION_MIN_DAYS,
+    HISTORY_RETENTION_DEFAULTS_VERSION,
     CHIP_MIN_WIDTH,
     CHIP_MAX_WIDTH,
     CHIP_WIDTH_MIN_LIMIT,
@@ -1659,6 +1660,10 @@ class MainWindow(QWidget):
             needs_sizing_defaults_migration = (
                 settings.get("chip_width_defaults_version", 0) < CHIP_WIDTH_DEFAULTS_VERSION
             )
+            needs_history_defaults_migration = (
+                settings.get("history_retention_defaults_version", 0)
+                < HISTORY_RETENTION_DEFAULTS_VERSION
+            )
             self.show_on_hover_enabled = settings["show_on_hover_enabled"]
             self.show_on_click_enabled = settings["show_on_click_enabled"]
             self.hide_on_paste_enabled = settings["hide_on_paste_enabled"]
@@ -1681,6 +1686,11 @@ class MainWindow(QWidget):
                 else (accent_options[0] if accent_options else self.theme["settings"]["accent"])
             )
             self.history_retention_days = settings["history_retention_days"]
+            if needs_history_defaults_migration:
+                # 30 days was the previous default; move installations that
+                # still have it to the new 10-day default once.
+                if self.history_retention_days == 30:
+                    self.history_retention_days = CLIPBOARD_HISTORY_RETENTION_DAYS
             self.shelf_position = settings["shelf_position"]
             if needs_sizing_defaults_migration:
                 self.chip_min_width = CHIP_MIN_WIDTH
@@ -1714,6 +1724,7 @@ class MainWindow(QWidget):
                 "chip_min_width": self.chip_min_width,
                 "chip_max_width": self.chip_max_width,
                 "history_retention_days": self.history_retention_days,
+                "history_retention_defaults_version": HISTORY_RETENTION_DEFAULTS_VERSION,
                 "shelf_width_ratio": self.shelf_width_ratio,
                 "shelf_position": self.shelf_position,
                 "theme": self.theme_name,
@@ -1839,12 +1850,13 @@ class MainWindow(QWidget):
             self.empty_state_widget.setVisible(True)
 
         if self._settings_dialog is not None:
-            combo = self._settings_dialog.history_date_combo
-            combo.blockSignals(True)
-            combo.clear()
-            combo.addItem(self._history_date_filter, self._history_date_filter)
-            combo.setCurrentIndex(0)
-            combo.blockSignals(False)
+            slider = self._settings_dialog.history_date_slider
+            slider.blockSignals(True)
+            self._settings_dialog.history_dates = [self._history_date_filter]
+            slider.setRange(0, 0)
+            slider.setValue(0)
+            self._settings_dialog._update_history_date_label(0)
+            slider.blockSignals(False)
 
     def set_history_retention_days(self, days):
         self.history_retention_days = max(

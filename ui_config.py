@@ -393,6 +393,9 @@ def settings_stylesheet(palette):
         QLabel#aboutVersionBadge {{ color: {p['accent']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['control_border']}; border-radius: 10px; padding: 5px 10px; font-size: {f['dialog_size']}px; font-weight: 600; }}
         QLabel#aboutFactValue {{ color: {p['text']}; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
         QFrame#settingsCard {{ background: {p['surface']}; border: {SETTINGS_CARD_BORDER_WIDTH}px solid {p['border']}; border-radius: {CARD_RADIUS}px; }}
+        QLabel#browseDateTitle {{ color: {p['text']}; font-size: {f['setting_title_size']}px; font-weight: {f['setting_title_weight']}; }}
+        QLabel#browseDateDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
+        QLabel#browseDateValue {{ color: {p['text']}; font-size: 16px; font-weight: 500; padding-right: 2px; }}
         QFrame#rowSeparator {{ background: {p['border']}; border: none; }}
         QPushButton#clearHistoryButton {{ color: {p['danger']}; background: {p['control_background']}; border: {BUTTON_BORDER_WIDTH}px solid {p['border']}; border-radius: {CLEAR_BUTTON_RADIUS}px; padding: {CLEAR_BUTTON_PADDING[0]}px {CLEAR_BUTTON_PADDING[1]}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; }}
         QPushButton#clearHistoryButton:hover {{ background: {p['control_hover_background']}; border-color: {p['danger']}; }}
@@ -404,6 +407,10 @@ def settings_stylesheet(palette):
         QLabel#settingDescription {{ color: {p['secondary_text']}; font-size: {f['setting_description_size']}px; font-weight: {f['setting_description_weight']}; }}
         QCheckBox#settingsSwitch {{ background: transparent; border: none; }}
         QComboBox, QSpinBox, QDoubleSpinBox {{ color: {p['text']}; background: {p['control_background']}; border: {CONTROL_BORDER_WIDTH}px solid {p['control_border']}; border-radius: {CONTROL_RADIUS}px; padding: {CONTROL_PADDING[0]}px {CONTROL_PADDING[1]}px; min-height: {CONTROL_MIN_HEIGHT}px; font-size: {f['control_size']}px; font-weight: {f['control_weight']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; }}
+        QSlider#historyDateSlider {{ min-width: 180px; min-height: 64px; }}
+        QSlider#historyDateSlider::groove:horizontal {{ height: 12px; background: transparent; }}
+        QSlider#historyDateSlider::sub-page:horizontal, QSlider#historyDateSlider::add-page:horizontal {{ background: transparent; }}
+        QSlider#historyDateSlider::handle:horizontal {{ width: 44px; margin: -16px 0; background: transparent; border: none; }}
         QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ color: {p['text']}; background: {p['control_hover_background']}; border-color: {p['control_hover_border']}; }}
         QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: {CONTROL_FOCUS_BORDER_WIDTH}px solid {p['control_focus_border']}; }}
         QComboBox#macCombo {{ padding: 0; border: none; background: transparent; min-height: {DROPDOWN_MIN_SIZE[1]}px; }}
