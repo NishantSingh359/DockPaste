@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Settings window geometry and typography.
 WINDOW_TITLE = "Settings"
-WINDOW_SIZE = (1100, 1000)
+WINDOW_SIZE = (1000, 900)
 WINDOW_MIN_SIZE = (900, 770)
 WINDOW_MAX_SIZE = (1200, 1100)
 ROOT_MARGINS = (12, 12, 12, 12)
@@ -28,13 +28,13 @@ FONT = {
     "page_title_size": 30,
     "page_title_weight": 700,
     "page_subtitle_size": 18,
-    "page_subtitle_weight": 600,
+    "page_subtitle_weight": 500,
     "setting_title_size": 20,
-    "setting_title_weight": 600,
-    "setting_description_size": 16,
-    "setting_description_weight": 600,
+    "setting_title_weight": 400,
+    "setting_description_size": 15,
+    "setting_description_weight": 500,
     "control_size": 16,
-    "control_weight": 600,
+    "control_weight": 500,
 }
 
 # Settings navigation, pages, and cards.
