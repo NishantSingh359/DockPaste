@@ -211,7 +211,7 @@ SHELF = {
     "margin": (0, 0, 0, 0),
     "spacing": 5,
     "chip_spacing": 10,
-    "border_width": 1,
+    "border_width": 2,
     "border_radius": 27,
     "shadow_blur_radius": 10,
     "shadow_offset": (0, 2),
