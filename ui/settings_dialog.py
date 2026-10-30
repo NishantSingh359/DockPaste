@@ -452,6 +452,7 @@ class SettingsDialog(QDialog):
         show_on_click,
         hide_on_paste,
         highlight_shelf_on_drag,
+        show_clip_type_filter,
         clip_scroll_speed,
         show_clip_indexes,
         color_preview_enabled,
@@ -479,6 +480,7 @@ class SettingsDialog(QDialog):
         on_show_on_click,
         on_hide_on_paste,
         on_highlight_shelf_on_drag,
+        on_show_clip_type_filter,
         on_clip_scroll_speed,
         on_show_clip_indexes,
         on_color_preview,
@@ -574,6 +576,13 @@ class SettingsDialog(QDialog):
             "Show the accent border when an item can be dropped on the shelf.",
             highlight_shelf_on_drag,
             on_highlight_shelf_on_drag,
+        )
+        self.show_clip_type_filter = self._add_switch(
+            general_card,
+            "Show Clip Type Filter",
+            "Show the button beside the shelf to filter Text, Link, Image, and Path clips.",
+            show_clip_type_filter,
+            on_show_clip_type_filter,
         )
         self.close_to_tray = self._add_switch(
             general_card, "Keep Running When Closed", "Keep clipboard monitoring active from the system tray.", close_to_tray, on_close_to_tray

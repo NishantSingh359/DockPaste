@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QGraphicsDropShadowEffect,
     QSystemTrayIcon,
+    QToolButton,
 )
 
 from PySide6.QtCore import (
@@ -48,6 +49,7 @@ except ImportError:
     winreg = None
 
 from core.clipboard_manager import ClipboardManager
+from core.database import detect_type
 from core.dragdrop_handler import DragDropHandler
 from core.favicon_service import shutdown_favicon_service
 from core.paste_controller import PasteController
@@ -116,19 +118,20 @@ class HistoryLoadSignals(QObject):
 class HistoryLoadTask(QRunnable):
     """Read one date's clip records away from the GUI thread."""
 
-    def __init__(self, database, generation, clip_date, cursor=None, page_size=100):
+    def __init__(self, database, generation, clip_date, cursor=None, page_size=100, clip_type=None):
         super().__init__()
         self.database = database
         self.generation = generation
         self.clip_date = clip_date
         self.cursor = cursor
         self.page_size = page_size
+        self.clip_type = clip_type
         self.signals = HistoryLoadSignals()
 
     def run(self):
         try:
             records, has_more = self.database.get_by_date_page(
-                self.clip_date, self.page_size, self.cursor
+                self.clip_date, self.page_size, self.cursor, self.clip_type
             )
             self.signals.completed.emit(
                 self.generation, self.clip_date, records, has_more, ""
@@ -315,6 +318,8 @@ class MainWindow(QWidget):
         self.chip_max_width = CHIP_MAX_WIDTH
         self.history_retention_days = CLIPBOARD_HISTORY_RETENTION_DAYS
         self._history_date_filter = date.today().isoformat()
+        self._clip_type_filter = None
+        self.show_clip_type_filter_enabled = True
         shelf_theme = self.theme.get("shelf", {})
         self.shelf_width_ratio = float(shelf_theme.get("width_ratio", SHELF_WIDTH_RATIO))
         self.shelf_position = "Top"
@@ -401,14 +406,14 @@ class MainWindow(QWidget):
         QTimer.singleShot(0, lambda: self._request_history_load(self._history_date_filter))
 
     def setup_ui(self):
-        main_layout = QVBoxLayout(self)
+        main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(
             self._shadow_margin,
             self._shadow_margin,
             self._shadow_margin,
             self._shadow_margin,
         )
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(int(ui_config.SHELF.get("filter_spacing", 10)))
 
         self.container = ShelfContainer(self.theme)
         # Background is drawn in ShelfContainer.paintEvent(), so keep widget background unset
@@ -448,7 +453,17 @@ class MainWindow(QWidget):
         self.scroll.setWidget(scroll_widget)
         container_layout.addWidget(self.scroll)
 
-        main_layout.addWidget(self.container)
+        main_layout.addWidget(self.container, 1)
+        self.filter_button = QToolButton(self)
+        self.filter_button.setObjectName("clipTypeFilterButton")
+        filter_size = int(ui_config.SHELF.get("height", 52))
+        self.filter_button.setFixedSize(filter_size, filter_size)
+        self.filter_button.setCursor(Qt.PointingHandCursor)
+        self.filter_button.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.filter_button.clicked.connect(self.cycle_clip_type_filter)
+        main_layout.addWidget(self.filter_button)
+        self.filter_button.setVisible(self.show_clip_type_filter_enabled)
+        self._update_filter_button()
         empty_theme = self.theme.get("empty", {})
         self.empty_state_widget = QWidget()
         self.empty_state_widget.setStyleSheet("background: transparent;")
@@ -507,6 +522,52 @@ class MainWindow(QWidget):
 
         self.update_mask()
 
+    def _update_filter_button(self):
+        labels = {
+            None: ("Filter clips", '<path d="M4 5h16l-6.3 7.2v5.3l-3.4 1.8v-7.1z"/>'),
+            "text": ("Showing text clips", '<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
+            "link": ("Showing link clips", '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+            "img": ("Showing image clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m4 17 5-5 3 3 3-4 5 6"/>'),
+            "path": ("Showing path clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 8v8M12 8v8M16 8v8"/>'),
+        }
+        label, drawing = labels[self._clip_type_filter]
+        accent = self.theme.get("settings", {}).get("accent", "#1687ff")
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
+               f'<g fill="none" stroke="{accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{drawing}</g></svg>')
+        renderer = QSvgRenderer(svg.encode("utf-8"))
+        icon_size = max(1, int(ui_config.SHELF.get("filter_icon_size", 24)))
+        pixmap = QPixmap(icon_size, icon_size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        self.filter_button.setIcon(QIcon(pixmap))
+        self.filter_button.setIconSize(QSize(icon_size, icon_size))
+        self.filter_button.setToolTip(label)
+        self.filter_button.setAccessibleName(label)
+        shelf = self.theme.get("shelf", {})
+        border_width = float(shelf.get("border_width", 1))
+        radius = int(ui_config.SHELF.get("height", 52)) // 2
+        self.filter_button.setStyleSheet(f"""
+            QToolButton#clipTypeFilterButton {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; border: {border_width}px solid {shelf.get('border', 'rgba(255,255,255,0.07)')}; border-radius: {radius}px; }}
+            QToolButton#clipTypeFilterButton:hover {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
+            QToolButton#clipTypeFilterButton:pressed {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
+        """)
+        self.filter_button.setGraphicsEffect(None)
+        shadow_blur = float(shelf.get("shadow_blur_radius", 10))
+        if shadow_blur > 0:
+            shadow = QGraphicsDropShadowEffect(self.filter_button)
+            shadow.setBlurRadius(shadow_blur)
+            shadow.setOffset(*shelf.get("shadow_offset", [0, 2]))
+            shadow.setColor(parse_color(shelf.get("shadow", "rgba(0,0,0,0.4)")))
+            self.filter_button.setGraphicsEffect(shadow)
+
+    def cycle_clip_type_filter(self):
+        filters = (None, "text", "link", "img", "path")
+        self._clip_type_filter = filters[(filters.index(self._clip_type_filter) + 1) % len(filters)]
+        self._update_filter_button()
+        self._request_history_load(self._history_date_filter)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "container"):
@@ -518,6 +579,9 @@ class MainWindow(QWidget):
     @safe_slot("Failed to add clipboard chip")
     def add_clip(self, content, clip_date=None, clip_index=None, pinned=False, _bulk=False):
         clip_date = clip_date or date.today().isoformat()
+        if self._clip_type_filter and not _bulk:
+            if detect_type(content) != self._clip_type_filter:
+                return
         if (
             self._history_date_filter is not None
             and self._history_date_filter != clip_date
@@ -618,6 +682,7 @@ class MainWindow(QWidget):
             clip_date,
             self._history_page_cursor,
             self._history_page_size,
+            self._clip_type_filter,
         )
         task.signals.completed.connect(self._on_history_records_loaded)
         self._history_load_tasks[generation] = task
@@ -1471,6 +1536,12 @@ class MainWindow(QWidget):
         self._set_drop_target_hovered(self._is_drag_over_shelf)
         self._save_context_menu_settings()
 
+    def set_show_clip_type_filter_enabled(self, enabled):
+        self.show_clip_type_filter_enabled = bool(enabled)
+        if hasattr(self, "filter_button"):
+            self.filter_button.setVisible(self.show_clip_type_filter_enabled)
+        self._save_context_menu_settings()
+
     def set_clip_scroll_speed(self, speed):
         self.clip_scroll_speed = max(
             CHIP_SCROLL_SPEED_MIN,
@@ -1581,6 +1652,8 @@ class MainWindow(QWidget):
             self.scroll.set_theme(self.theme)
         if hasattr(self, "container"):
             self.container.set_theme(self.theme)
+        if hasattr(self, "filter_button"):
+            self._update_filter_button()
         for chip in self.chips_by_content.values():
             chip.set_theme(self.theme)
         if hasattr(self, "empty_label"):
@@ -1668,6 +1741,9 @@ class MainWindow(QWidget):
             self.show_on_click_enabled = settings["show_on_click_enabled"]
             self.hide_on_paste_enabled = settings["hide_on_paste_enabled"]
             self.highlight_shelf_on_drag_enabled = settings["highlight_shelf_on_drag_enabled"]
+            self.show_clip_type_filter_enabled = settings["show_clip_type_filter_enabled"]
+            if hasattr(self, "filter_button"):
+                self.filter_button.setVisible(self.show_clip_type_filter_enabled)
             self.clip_scroll_speed = settings["clip_scroll_speed"]
             self.clip_indexing_enabled = settings["clip_indexing_enabled"]
             self.color_preview_enabled = settings["color_preview_enabled"]
@@ -1712,6 +1788,7 @@ class MainWindow(QWidget):
                 "show_on_click_enabled": self.show_on_click_enabled,
                 "hide_on_paste_enabled": self.hide_on_paste_enabled,
                 "highlight_shelf_on_drag_enabled": self.highlight_shelf_on_drag_enabled,
+                "show_clip_type_filter_enabled": self.show_clip_type_filter_enabled,
                 "clip_scroll_speed": self.clip_scroll_speed,
                 "clip_indexing_enabled": self.clip_indexing_enabled,
                 "color_preview_enabled": self.color_preview_enabled,
@@ -1773,6 +1850,7 @@ class MainWindow(QWidget):
             show_on_click=self.show_on_click_enabled,
             hide_on_paste=self.hide_on_paste_enabled,
             highlight_shelf_on_drag=self.highlight_shelf_on_drag_enabled,
+            show_clip_type_filter=self.show_clip_type_filter_enabled,
             clip_scroll_speed=self.clip_scroll_speed,
             show_clip_indexes=self.clip_indexing_enabled,
             color_preview_enabled=self.color_preview_enabled,
@@ -1810,6 +1888,7 @@ class MainWindow(QWidget):
             on_show_on_click=self.set_show_on_click_enabled,
             on_hide_on_paste=self.set_hide_on_paste_enabled,
             on_highlight_shelf_on_drag=self.set_highlight_shelf_on_drag_enabled,
+            on_show_clip_type_filter=self.set_show_clip_type_filter_enabled,
             on_clip_scroll_speed=self.set_clip_scroll_speed,
             on_show_clip_indexes=self.set_clip_indexing_enabled,
             on_color_preview=self.set_color_preview_enabled,

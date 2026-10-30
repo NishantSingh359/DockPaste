@@ -388,6 +388,7 @@ class ClipboardDatabase:
         clip_date: str,
         limit: int = 100,
         cursor: tuple[int, int, int] | None = None,
+        clip_type: str | None = None,
     ) -> tuple[list[dict], bool]:
         """Return one stable keyset page for a date and whether another exists.
 
@@ -398,24 +399,26 @@ class ClipboardDatabase:
         limit = max(1, int(limit))
         conn = self._get_connection()
         try:
+            type_clause = " AND type = ?" if clip_type else ""
+            type_params = (clip_type,) if clip_type else ()
             if cursor is None:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT rowid AS id, date, "index", type, content, pinned
                     FROM clips
-                    WHERE date = ?
+                    WHERE date = ?{type_clause}
                     ORDER BY pinned DESC, "index" DESC, rowid DESC
                     LIMIT ?
                     """,
-                    (clip_date, limit + 1),
+                    (clip_date, *type_params, limit + 1),
                 ).fetchall()
             else:
                 pinned, index, rowid = (int(value) for value in cursor)
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT rowid AS id, date, "index", type, content, pinned
                     FROM clips
-                    WHERE date = ? AND (
+                    WHERE date = ?{type_clause} AND (
                         pinned < ? OR
                         (pinned = ? AND "index" < ?) OR
                         (pinned = ? AND "index" = ? AND rowid < ?)
@@ -425,6 +428,7 @@ class ClipboardDatabase:
                     """,
                     (
                         clip_date,
+                        *type_params,
                         pinned,
                         pinned,
                         index,
