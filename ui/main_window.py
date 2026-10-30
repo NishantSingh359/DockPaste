@@ -68,10 +68,9 @@ from animation_config import (
     CHIP_LAYOUT_ANIMATION_MS,
     MOTION_ENABLED,
     MOTION_SHELF_MS,
+    SHELF_SHOW_DURATION_MS,
+    SHELF_HIDE_DURATION_MS,
     SHELF_CHIP_REVEAL_ENABLED,
-    SHELF_CHIP_REVEAL_MS,
-    SHELF_CHIP_REVEAL_STAGGER_MS,
-    SHELF_CHIP_REVEAL_OFFSET,
     CHIP_SCROLL_SPEED,
     CHIP_SCROLL_SPEED_MIN,
     CHIP_SCROLL_SPEED_MAX,
@@ -1445,12 +1444,13 @@ class MainWindow(QWidget):
         if self.hide_on_paste_enabled:
             self.hide_shelf()
 
+        show_duration = max(0, int(SHELF_SHOW_DURATION_MS))
         QTimer.singleShot(
-            MOTION_SHELF_MS,
+            show_duration,
             lambda: self.paste_controller.paste_text(content, self.last_target_window)
         )
         QTimer.singleShot(
-            MOTION_SHELF_MS + 220,
+            show_duration + 220,
             self.clipboard_manager.restore_previous_clipboard
         )
 
@@ -2194,7 +2194,10 @@ class MainWindow(QWidget):
 
         if SHELF_CHIP_REVEAL_ENABLED:
             self.reveal_chips()
-        self.animate_to(self.open_pos)
+        self.animate_to(
+            self.open_pos,
+            duration=SHELF_SHOW_DURATION_MS,
+        )
 
     def hide_shelf(self, force=False):
         if self.is_shelf_pinned and not force:
@@ -2209,9 +2212,10 @@ class MainWindow(QWidget):
         self._is_hiding = True
         if self.hide_reset_timer.isActive():
             self.hide_reset_timer.stop()
-        self.hide_reset_timer.start(max(MOTION_SHELF_MS, 120) + 40)
+        hide_duration = max(0, int(SHELF_HIDE_DURATION_MS))
+        self.hide_reset_timer.start(hide_duration + 40)
 
-        self.animate_to(self.hidden_pos)
+        self.animate_to(self.hidden_pos, duration=hide_duration)
 
     def reveal_chips(self):
         # Animations removed: ensure all chips are visible immediately
@@ -2257,7 +2261,7 @@ class MainWindow(QWidget):
         )
         return bool(ctrl_pressed and win_pressed)
 
-    def animate_to(self, target):
+    def animate_to(self, target, duration=None):
         if self._target_pos == target:
             return
 
@@ -2267,6 +2271,10 @@ class MainWindow(QWidget):
             return
 
         self.animation.stop()
+        if duration is not None:
+            self.animation.setDuration(max(0, int(duration)))
+        else:
+            self.animation.setDuration(MOTION_SHELF_MS)
         self.animation.setStartValue(self.pos())
         self.animation.setEndValue(target)
         self.animation.start()
