@@ -529,6 +529,7 @@ class MainWindow(QWidget):
             "link": ("Showing link clips", '<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>'),
             "img": ("Showing image clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m4 17 5-5 3 3 3-4 5 6"/>'),
             "path": ("Showing path clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 8v8M12 8v8M16 8v8"/>'),
+            "color": ("Showing color clips", '<path d="M12 3a9 9 0 1 0 0 18h1.2a2.2 2.2 0 0 0 1.8-3.5 1.6 1.6 0 0 1 1.3-2.5H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/><circle cx="17" cy="11" r="1"/>'),
         }
         label, drawing = labels[self._clip_type_filter]
         accent = self.theme.get("settings", {}).get("accent", "#1687ff")
@@ -563,7 +564,7 @@ class MainWindow(QWidget):
             self.filter_button.setGraphicsEffect(shadow)
 
     def cycle_clip_type_filter(self):
-        filters = (None, "text", "link", "img", "path")
+        filters = (None, "text", "link", "img", "path", "color")
         self._clip_type_filter = filters[(filters.index(self._clip_type_filter) + 1) % len(filters)]
         self._update_filter_button()
         self._request_history_load(self._history_date_filter)

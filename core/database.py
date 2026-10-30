@@ -5,7 +5,7 @@ Manages persistence of clipboard items with SQLite.
 Schema:
     date    - TEXT: local calendar date of the copied item
     index   - INTEGER: 1-based order within the date
-    type    - TEXT: 'link', 'text', 'path', or 'img'
+    type    - TEXT: 'link', 'text', 'path', 'img', or 'color'
     content - TEXT: the copied text, link, path, or img file path
     pinned  - INTEGER: 1 when the clip is pinned, otherwise 0
 """
@@ -60,10 +60,14 @@ def detect_type(content: str) -> str:
         'link'  - if content looks like a URL (http/https/ftp)
         'path'  - if content looks like a file/folder path
         'img'   - if content looks like an existing image file path
+        'color' - if content is a supported HEX or RGB(A) color code
         'text'  - otherwise
 
     """
     content = content.strip()
+
+    if _is_color_code(content):
+        return "color"
 
     # URL detection
     url_pattern = re.compile(
@@ -99,6 +103,28 @@ def detect_type(content: str) -> str:
 
 
     return "text"
+
+
+def _is_color_code(value: str) -> bool:
+    """Return whether a string is a supported HEX or CSS RGB color token."""
+    if re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})", value):
+        return True
+    match = re.fullmatch(
+        r"rgba?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})"
+        r"\s*(?:,\s*(\d+(?:\.\d+)?)\s*)?\)",
+        value,
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    channels = [int(match.group(index)) for index in (1, 2, 3)]
+    if any(channel > 255 for channel in channels):
+        return False
+    alpha_text = match.group(4)
+    if alpha_text is None:
+        return True
+    alpha = float(alpha_text)
+    return 0 <= alpha <= 1 or (alpha <= 255 and alpha.is_integer())
 
 
 
@@ -172,10 +198,24 @@ class ClipboardDatabase:
                     "ALTER TABLE clips ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 "
                     "CHECK (pinned IN (0, 1))"
                 )
+            self._migrate_color_clip_types(conn)
             self._create_clips_indexes(conn)
             conn.commit()
         finally:
             conn.close()
+
+    @staticmethod
+    def _migrate_color_clip_types(conn):
+        """Reclassify previously stored color strings from text to color."""
+        rows = conn.execute(
+            "SELECT rowid, content FROM clips WHERE type = 'text'"
+        ).fetchall()
+        matching_ids = [row["rowid"] for row in rows if _is_color_code(str(row["content"]).strip())]
+        if matching_ids:
+            conn.executemany(
+                "UPDATE clips SET type = 'color' WHERE rowid = ?",
+                ((row_id,) for row_id in matching_ids),
+            )
 
     @staticmethod
     def _create_clips_table(conn, table_name="clips"):
@@ -314,9 +354,9 @@ class ClipboardDatabase:
         Returns the row handle for a new clip, or None when an existing clip
         was moved to the newest position for today.
         """
-        if clip_type not in ("link", "text", "path", "img"):
+        if clip_type not in ("link", "text", "path", "img", "color"):
             raise ValueError(
-                f"Invalid type '{clip_type}'. Must be 'link', 'text', 'path', or 'img'."
+                f"Invalid type '{clip_type}'. Must be 'link', 'text', 'path', 'img', or 'color'."
             )
 
         def operation(conn):
@@ -523,7 +563,7 @@ class ClipboardDatabase:
         Retrieve clipboard history filtered by type.
 
         Args:
-            clip_type: One of 'link', 'text', 'path'.
+            clip_type: One of 'link', 'text', 'path', 'img', or 'color'.
             limit: Maximum number of records to return.
             offset: Number of records to skip.
 
@@ -744,7 +784,7 @@ class ClipboardDatabase:
         Get statistics about the clipboard history.
 
         Returns:
-            Dict with keys: total, links, texts, paths, imgs.
+            Dict with keys: total, links, texts, paths, imgs, colors.
         """
 
         conn = self._get_connection()
@@ -754,7 +794,8 @@ class ClipboardDatabase:
             texts = conn.execute("SELECT COUNT(*) as c FROM clips WHERE type='text'").fetchone()["c"]
             paths = conn.execute("SELECT COUNT(*) as c FROM clips WHERE type='path'").fetchone()["c"]
             imgs = conn.execute("SELECT COUNT(*) as c FROM clips WHERE type='img'").fetchone()["c"]
-            return {"total": total, "links": links, "texts": texts, "paths": paths, "imgs": imgs}
+            colors = conn.execute("SELECT COUNT(*) as c FROM clips WHERE type='color'").fetchone()["c"]
+            return {"total": total, "links": links, "texts": texts, "paths": paths, "imgs": imgs, "colors": colors}
         finally:
             conn.close()
 
