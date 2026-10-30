@@ -2217,7 +2217,11 @@ class MainWindow(QWidget):
         hide_duration = max(0, int(SHELF_HIDE_DURATION_MS))
         self.hide_reset_timer.start(hide_duration + 40)
 
-        self.animate_to(self.hidden_pos, duration=hide_duration)
+        self.animate_to(
+            self.hidden_pos,
+            duration=hide_duration,
+            easing_curve=QEasingCurve.InOutCubic,
+        )
 
     def reveal_chips(self):
         # Animations removed: ensure all chips are visible immediately
@@ -2263,7 +2267,7 @@ class MainWindow(QWidget):
         )
         return bool(ctrl_pressed and win_pressed)
 
-    def animate_to(self, target, duration=None):
+    def animate_to(self, target, duration=None, easing_curve=QEasingCurve.OutCubic):
         if self._target_pos == target:
             return
 
@@ -2277,6 +2281,7 @@ class MainWindow(QWidget):
             self.animation.setDuration(max(0, int(duration)))
         else:
             self.animation.setDuration(MOTION_SHELF_MS)
+        self.animation.setEasingCurve(easing_curve)
         self.animation.setStartValue(self.pos())
         self.animation.setEndValue(target)
         self.animation.start()
