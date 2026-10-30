@@ -457,6 +457,7 @@ class MainWindow(QWidget):
         self.filter_button.setObjectName("clipTypeFilterButton")
         filter_size = int(ui_config.SHELF.get("height", 52))
         self.filter_button.setFixedSize(filter_size, filter_size)
+        self.filter_button.setContentsMargins(0, 0, 0, 0)
         self.filter_button.setCursor(Qt.PointingHandCursor)
         self.filter_button.setToolButtonStyle(Qt.ToolButtonIconOnly)
         self.filter_button.clicked.connect(self.cycle_clip_type_filter)
@@ -523,9 +524,9 @@ class MainWindow(QWidget):
 
     def _update_filter_button(self):
         labels = {
-            None: ("Filter clips", '<path d="M4 5h16l-6.3 7.2v5.3l-3.4 1.8v-7.1z"/>'),
+            None: ("Filter clips", '<path d="M3 4h18l-7 8v7l-4 2v-9z"/>'),
             "text": ("Showing text clips", '<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
-            "link": ("Showing link clips", '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+            "link": ("Showing link clips", '<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>'),
             "img": ("Showing image clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m4 17 5-5 3 3 3-4 5 6"/>'),
             "path": ("Showing path clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M8 8v8M12 8v8M16 8v8"/>'),
         }
@@ -548,7 +549,7 @@ class MainWindow(QWidget):
         border_width = float(shelf.get("border_width", 1))
         radius = int(ui_config.SHELF.get("height", 52)) // 2
         self.filter_button.setStyleSheet(f"""
-            QToolButton#clipTypeFilterButton {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; border: {border_width}px solid {shelf.get('border', 'rgba(255,255,255,0.07)')}; border-radius: {radius}px; }}
+            QToolButton#clipTypeFilterButton {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; border: {border_width}px solid {shelf.get('border', 'rgba(255,255,255,0.07)')}; border-radius: {radius}px; padding: 0px; margin: 0px; }}
             QToolButton#clipTypeFilterButton:hover {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
             QToolButton#clipTypeFilterButton:pressed {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
         """)
