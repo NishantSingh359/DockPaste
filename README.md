@@ -10,18 +10,18 @@ I’m not a software developer, and I started DockPaste with no app development 
 
 ## Features
 
-- Automatically saves copied text, links, file paths, images, and screenshots to local history.
+- **No clip-count limit:** Store any number of clips. History loads in pages to keep browsing responsive.
+- Automatically saves copied text, links, file, folders, images, and screenshots to local history.
 - Shows clips as compact chips in a floating shelf. Click a chip to paste it into the active app.
-- Drag and drop text, files, and images into the shelf.
+- Drag and drop text, links, files, folders and images into the shelf.
 - Pin clips, delete individual clips, or clear all unpinned clips.
-- Browse history by copy date. History is stored between app launches and is automatically removed after the retention period.
-- Choose how long to keep history in Settings; the default is 30 days.
+- Browse history by copy date. History is stored between app launches.
+- Choose how long to keep history in Settings (1–30 days; 10 days by default). Expired clips, including pinned clips, are removed automatically.
 - Preview text or open copied images on double-click, with separate settings for each.
 - Show color previews and website favicons on supported clips.
 - Configure the shelf to appear on hover, hide after pasting, or keep running in the system tray.
-- Set the maximum number of visible chips (100 by default; configurable from 50 to 500).
 - Set a Windows startup option, adjust shelf size, and choose from multiple themes.
-- Optionally prevent clipboard items larger than 5 MB from entering history and show a warning when an item is skipped.
+- Optionally skip text and image items larger than 5 MB and show a warning when an item is skipped. Ordinary files and folders are stored as paths and are exempt from this size limit.
 - On Windows, press **Ctrl + Win** to pin or unpin the shelf.
 
 ### Preview Text
@@ -49,7 +49,7 @@ I’m not a software developer, and I started DockPaste with no app development 
 ## Install on Windows
 
 1. Open the [latest GitHub release](https://github.com/NishantSingh359/DockPaste/releases).
-2. Download and run `DockPaste-Setup-v1.5.exe`.
+2. Download and run `DockPaste-Setup-v1.6.exe`.
 3. Follow the installer, then launch DockPaste from the Start menu or the optional desktop shortcut.
 
 DockPaste currently provides a Windows installer for 64-bit Windows 10 and Windows 11.
