@@ -415,7 +415,7 @@ class ClipboardDatabase:
                 SELECT rowid AS id, date, "index", type, content, pinned
                 FROM clips
                 WHERE date = ?
-                ORDER BY pinned DESC, "index" DESC
+                ORDER BY "index" DESC, rowid DESC
                 """,
                 (clip_date,),
             ).fetchall()
@@ -429,50 +429,51 @@ class ClipboardDatabase:
         limit: int = 100,
         cursor: tuple[int, int, int] | None = None,
         clip_type: str | None = None,
+        pinned_only: bool = False,
     ) -> tuple[list[dict], bool]:
         """Return one stable keyset page for a date and whether another exists.
 
-        Cursor fields are ``(pinned, index, rowid)`` from the final returned
-        row. Ordering and cursor predicates intentionally match exactly so
-        paging remains stable when a date contains many clips.
+        Cursor fields are ``(unused, index, rowid)`` for compatibility with
+        existing callers. Results stay in chronological order regardless of
+        pin state, with an optional pinned-only filter.
         """
         limit = max(1, int(limit))
         conn = self._get_connection()
         try:
             type_clause = " AND type = ?" if clip_type else ""
             type_params = (clip_type,) if clip_type else ()
+            pinned_clause = " AND pinned = 1" if pinned_only else ""
+            where_clause = f"date = ?{type_clause}{pinned_clause}"
             if cursor is None:
                 rows = conn.execute(
                     f"""
                     SELECT rowid AS id, date, "index", type, content, pinned
                     FROM clips
-                    WHERE date = ?{type_clause}
-                    ORDER BY pinned DESC, "index" DESC, rowid DESC
+                    WHERE {where_clause}
+                    ORDER BY "index" DESC, rowid DESC
                     LIMIT ?
                     """,
                     (clip_date, *type_params, limit + 1),
                 ).fetchall()
             else:
-                pinned, index, rowid = (int(value) for value in cursor)
+                if len(cursor) == 3:
+                    _, index, rowid = (int(value) for value in cursor)
+                else:
+                    index, rowid = (int(value) for value in cursor)
                 rows = conn.execute(
                     f"""
                     SELECT rowid AS id, date, "index", type, content, pinned
                     FROM clips
-                    WHERE date = ?{type_clause} AND (
-                        pinned < ? OR
-                        (pinned = ? AND "index" < ?) OR
-                        (pinned = ? AND "index" = ? AND rowid < ?)
+                    WHERE {where_clause} AND (
+                        "index" < ? OR ("index" = ? AND rowid < ?)
                     )
-                    ORDER BY pinned DESC, "index" DESC, rowid DESC
+                    ORDER BY "index" DESC, rowid DESC
                     LIMIT ?
                     """,
                     (
                         clip_date,
                         *type_params,
-                        pinned,
-                        pinned,
                         index,
-                        pinned,
                         index,
                         rowid,
                         limit + 1,
@@ -493,6 +494,18 @@ class ClipboardDatabase:
             return cursor.rowcount > 0
 
         return self._write_with_retry(operation)
+
+    def is_pinned(self, content: str, clip_date: str) -> bool:
+        """Return whether one clip is pinned on the requested date."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT pinned FROM clips WHERE date = ? AND content = ?",
+                (clip_date, content),
+            ).fetchone()
+            return bool(row["pinned"]) if row else False
+        finally:
+            conn.close()
 
     def delete_unpinned(self, clip_date: str) -> int:
         """Delete every unpinned clip for one history date."""

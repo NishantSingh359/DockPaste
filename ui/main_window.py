@@ -120,7 +120,7 @@ class HistoryLoadSignals(QObject):
 class HistoryLoadTask(QRunnable):
     """Read one date's clip records away from the GUI thread."""
 
-    def __init__(self, database, generation, clip_date, cursor=None, page_size=100, clip_type=None):
+    def __init__(self, database, generation, clip_date, cursor=None, page_size=100, clip_type=None, pinned_only=False):
         super().__init__()
         self.database = database
         self.generation = generation
@@ -128,12 +128,17 @@ class HistoryLoadTask(QRunnable):
         self.cursor = cursor
         self.page_size = page_size
         self.clip_type = clip_type
+        self.pinned_only = pinned_only
         self.signals = HistoryLoadSignals()
 
     def run(self):
         try:
             records, has_more = self.database.get_by_date_page(
-                self.clip_date, self.page_size, self.cursor, self.clip_type
+                self.clip_date,
+                self.page_size,
+                self.cursor,
+                self.clip_type,
+                self.pinned_only,
             )
             self.signals.completed.emit(
                 self.generation, self.clip_date, records, has_more, ""
@@ -321,6 +326,7 @@ class MainWindow(QWidget):
         self.history_retention_days = CLIPBOARD_HISTORY_RETENTION_DAYS
         self._history_date_filter = date.today().isoformat()
         self._clip_type_filter = None
+        self._pinned_only_filter = False
         self.show_clip_type_filter_enabled = True
         shelf_theme = self.theme.get("shelf", {})
         self.shelf_width_ratio = float(shelf_theme.get("width_ratio", SHELF_WIDTH_RATIO))
@@ -459,6 +465,16 @@ class MainWindow(QWidget):
         container_layout.addWidget(self.scroll)
 
         main_layout.addWidget(self.container, 1)
+        self.pin_filter_button = QToolButton(self)
+        self.pin_filter_button.setObjectName("pinnedClipsFilterButton")
+        pin_size = int(ui_config.SHELF.get("height", 52))
+        self.pin_filter_button.setFixedSize(pin_size, pin_size)
+        self.pin_filter_button.setContentsMargins(0, 0, 0, 0)
+        self.pin_filter_button.setCursor(Qt.PointingHandCursor)
+        self.pin_filter_button.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.pin_filter_button.clicked.connect(self.toggle_pinned_filter)
+        main_layout.addWidget(self.pin_filter_button)
+        self._update_pin_filter_button()
         self.filter_button = QToolButton(self)
         self.filter_button.setObjectName("clipTypeFilterButton")
         filter_size = int(ui_config.SHELF.get("height", 52))
@@ -554,9 +570,13 @@ class MainWindow(QWidget):
         self.filter_button.setAccessibleName(label)
         shelf = self.theme.get("shelf", {})
         border_width = float(shelf.get("border_width", 1))
+        border_color = (
+            accent if self._clip_type_filter is not None
+            else shelf.get("border", "rgba(255,255,255,0.07)")
+        )
         radius = int(ui_config.SHELF.get("height", 52)) // 2
         self.filter_button.setStyleSheet(f"""
-            QToolButton#clipTypeFilterButton {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; border: {border_width}px solid {shelf.get('border', 'rgba(255,255,255,0.07)')}; border-radius: {radius}px; padding: 0px; margin: 0px; }}
+            QToolButton#clipTypeFilterButton {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; border: {border_width}px solid {border_color}; border-radius: {radius}px; padding: 0px; margin: 0px; }}
             QToolButton#clipTypeFilterButton:hover {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
             QToolButton#clipTypeFilterButton:pressed {{ background: {shelf.get('background', 'rgba(20,20,20,1)')}; }}
         """)
@@ -573,6 +593,14 @@ class MainWindow(QWidget):
         filters = (None, "text", "link", "img", "path", "color")
         self._clip_type_filter = filters[(filters.index(self._clip_type_filter) + 1) % len(filters)]
         self._update_filter_button()
+        self._reload_with_filter_transition()
+
+    def toggle_pinned_filter(self):
+        self._pinned_only_filter = not self._pinned_only_filter
+        self._update_pin_filter_button()
+        self._reload_with_filter_transition()
+
+    def _reload_with_filter_transition(self):
         self._filter_transition_generation += 1
         transition_generation = self._filter_transition_generation
         self._history_load_generation += 1
@@ -583,6 +611,46 @@ class MainWindow(QWidget):
             CLIP_FILTER_FADE_OUT_MS,
             lambda: self._reload_history_after_filter_transition(transition_generation),
         )
+
+    def _update_pin_filter_button(self):
+        selected = self._pinned_only_filter
+        label = "Showing pinned clips" if selected else "Show pinned clips"
+        accent = self.theme.get("settings", {}).get("accent", "#1687ff")
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
+            f'<g fill="none" stroke="{accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>'
+            '</g></svg>'
+        )
+        renderer = QSvgRenderer(svg.encode("utf-8"))
+        icon_size = max(1, int(ui_config.SHELF.get("filter_icon_size", 24)))
+        pixmap = QPixmap(icon_size, icon_size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        self.pin_filter_button.setIcon(QIcon(pixmap))
+        self.pin_filter_button.setIconSize(QSize(icon_size, icon_size))
+        self.pin_filter_button.setToolTip(label)
+        self.pin_filter_button.setAccessibleName(label)
+        shelf = self.theme.get("shelf", {})
+        border_width = float(shelf.get("border_width", 1))
+        radius = int(ui_config.SHELF.get("height", 52)) // 2
+        background = shelf.get("background", "rgba(20,20,20,1)")
+        border_color = accent if selected else shelf.get("border", "rgba(255,255,255,0.07)")
+        self.pin_filter_button.setStyleSheet(f"""
+            QToolButton#pinnedClipsFilterButton {{ background: {background}; border: {border_width}px solid {border_color}; border-radius: {radius}px; padding: 0px; margin: 0px; }}
+            QToolButton#pinnedClipsFilterButton:hover {{ background: {background}; }}
+            QToolButton#pinnedClipsFilterButton:pressed {{ background: {background}; }}
+        """)
+        self.pin_filter_button.setGraphicsEffect(None)
+        shadow_blur = float(shelf.get("shadow_blur_radius", 10))
+        if shadow_blur > 0:
+            shadow = QGraphicsDropShadowEffect(self.pin_filter_button)
+            shadow.setBlurRadius(shadow_blur)
+            shadow.setOffset(*shelf.get("shadow_offset", [0, 2]))
+            shadow.setColor(parse_color(shelf.get("shadow", "rgba(0,0,0,0.4)")))
+            self.pin_filter_button.setGraphicsEffect(shadow)
 
     def _reload_history_after_filter_transition(self, transition_generation):
         if transition_generation != self._filter_transition_generation:
@@ -682,6 +750,24 @@ class MainWindow(QWidget):
         ):
             return
 
+        if self._pinned_only_filter and not _bulk:
+            prior_record = next(
+                (record for record in self._history_records_to_render if record["content"] == content),
+                None,
+            )
+            existing_widget = self.chips_by_content.get(content)
+            if prior_record is not None:
+                pinned = bool(prior_record.get("pinned", 0))
+            elif existing_widget is not None:
+                pinned = bool(existing_widget.pinned)
+            else:
+                try:
+                    pinned = self.clipboard_manager.get_db().is_pinned(content, clip_date)
+                except Exception:
+                    log_exception("Failed to check clipboard pin state")
+            if not pinned:
+                return
+
         if clip_index is None:
             try:
                 clip_index = self.clipboard_manager.get_db().get_daily_index(
@@ -777,6 +863,7 @@ class MainWindow(QWidget):
             self._history_page_cursor,
             self._history_page_size,
             self._clip_type_filter,
+            self._pinned_only_filter,
         )
         task.signals.completed.connect(self._on_history_records_loaded)
         self._history_load_tasks[generation] = task
@@ -798,7 +885,7 @@ class MainWindow(QWidget):
         if records:
             last_page_record = records[-1]
             page_cursor = (
-                int(last_page_record.get("pinned", 0)),
+                0,
                 int(last_page_record.get("index") or 0),
                 int(last_page_record.get("id") or 0),
             )
@@ -821,8 +908,8 @@ class MainWindow(QWidget):
             combined_records = sorted(
                 records_by_content.values(),
                 key=lambda record: (
-                    not bool(record.get("pinned", 0)),
                     -int(record.get("index") or 0),
+                    -int(record.get("id") or 0),
                 ),
             )
             self._history_records_to_render = [
@@ -832,8 +919,8 @@ class MainWindow(QWidget):
             ]
             self._history_records_to_render.sort(
                 key=lambda record: (
-                    not bool(record.get("pinned", 0)),
                     -int(record.get("index") or 0),
+                    -int(record.get("id") or 0),
                 )
             )
             loaded_contents = previously_loaded
@@ -864,14 +951,13 @@ class MainWindow(QWidget):
             )
         if page_cursor is not None:
             self._history_page_cursor = (
-                int(page_cursor[0]),
+                0,
                 int(page_cursor[1]),
                 int(page_cursor[2]),
             )
         self._history_has_more = has_more
         self._history_records_to_render.sort(
             key=lambda record: (
-                not bool(record.get("pinned", 0)),
                 -int(record.get("index") or 0),
                 -int(record.get("id") or 0),
             )
@@ -1137,7 +1223,6 @@ class MainWindow(QWidget):
             record["pinned"] = int(bool(pinned))
         self._history_records_to_render.sort(
             key=lambda item: (
-                not bool(item.get("pinned", 0)),
                 -int(item.get("index") or 0),
                 -int(item.get("id") or 0),
             )
@@ -1290,7 +1375,7 @@ class MainWindow(QWidget):
 
     def _empty_state_text(self):
         empty_theme = self.theme.get("empty", {})
-        if not self._clip_type_filter:
+        if not self._clip_type_filter and not self._pinned_only_filter:
             return empty_theme.get("text", "Nothing Here")
         labels = {
             "text": "text",
@@ -1299,7 +1384,9 @@ class MainWindow(QWidget):
             "path": "path",
             "color": "color",
         }
-        return f"No {labels.get(self._clip_type_filter, 'matching')} clips"
+        category = labels.get(self._clip_type_filter, "")
+        subject = " ".join(part for part in ("pinned" if self._pinned_only_filter else "", category) if part)
+        return f"No {subject} clips" if subject else "No clips"
 
     @safe_slot("Failed to clear unpinned clips")
     def clear_unpinned_clips(self):
@@ -1335,18 +1422,8 @@ class MainWindow(QWidget):
         )
         if record is not None:
             record["pinned"] = int(bool(chip.pinned))
-            self._history_records_to_render.sort(
-                key=lambda item: (
-                    not bool(item.get("pinned", 0)),
-                    -int(item.get("index") or 0),
-                    -int(item.get("id") or 0),
-                )
-            )
-            self._sync_history_page_cursor()
-        if self._history_placeholders:
-            self._rebuild_history_layout()
-        else:
-            self._reorder_chip(chip)
+        if self._pinned_only_filter and not chip.pinned:
+            self._request_history_load(self._history_date_filter)
 
     def _reorder_chip(self, chip):
         if not chip or getattr(chip, "_is_deleting", False):
@@ -1447,13 +1524,6 @@ class MainWindow(QWidget):
             if widget is getattr(self, "empty_state_widget", None):
                 continue
 
-            widget_is_pinned = bool(getattr(widget, "pinned", False))
-            if widget_is_pinned and not chip.pinned:
-                insert_at = layout_index + 1
-                continue
-            if chip.pinned and not widget_is_pinned:
-                break
-
             existing_number = getattr(widget, "clip_index", None)
             if (
                 existing_number is None
@@ -1486,7 +1556,7 @@ class MainWindow(QWidget):
         )
         if cursor_record is not None:
             self._history_page_cursor = (
-                int(cursor_record.get("pinned", 0)),
+                0,
                 int(cursor_record.get("index") or 0),
                 cursor_id,
             )
@@ -1512,7 +1582,6 @@ class MainWindow(QWidget):
         self._sync_history_page_cursor()
         self._history_records_to_render.sort(
             key=lambda record: (
-                not bool(record.get("pinned", 0)),
                 -int(record.get("index") or 0),
                 -int(record.get("id") or 0),
             )
@@ -1762,6 +1831,8 @@ class MainWindow(QWidget):
                 self._settings_dialog = None
         if hasattr(self, "scroll"):
             self.scroll.set_theme(self.theme)
+        if hasattr(self, "pin_filter_button"):
+            self._update_pin_filter_button()
         if hasattr(self, "container"):
             self.container.set_theme(self.theme)
         if hasattr(self, "filter_button"):
