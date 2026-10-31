@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QSystemTrayIcon,
     QToolButton,
 )
@@ -66,6 +67,8 @@ from ui.theme_manager import ThemeManager, get_theme_value, set_active_theme
 from animation_config import (
     CHIP_CONTEXT_MENU_FADE_OUT_MS,
     CHIP_LAYOUT_ANIMATION_MS,
+    CLIP_FILTER_FADE_OUT_MS,
+    CLIP_FILTER_FADE_IN_MS,
     MOTION_ENABLED,
     MOTION_SHELF_MS,
     SHELF_SHOW_DURATION_MS,
@@ -448,6 +451,9 @@ class MainWindow(QWidget):
         self.chip_layout.setContentsMargins(0, 0, 0, 0)
         self.chip_layout.setSpacing(ui_config.SHELF["chip_spacing"])
         self._scroll_content_widget = scroll_widget
+        self._filter_transition_animations = []
+        self._filter_transition_generation = 0
+        self._filter_transition_load_generation = None
 
         self.scroll.setWidget(scroll_widget)
         container_layout.addWidget(self.scroll)
@@ -524,7 +530,7 @@ class MainWindow(QWidget):
 
     def _update_filter_button(self):
         labels = {
-            None: ("Filter clips", '<path d="M3 4h18l-7 8v7l-4 2v-9z"/>'),
+            None: ("Filter clips", '<path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/>'),
             "text": ("Showing text clips", '<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
             "link": ("Showing link clips", '<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>'),
             "img": ("Showing image clips", '<rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m4 17 5-5 3 3 3-4 5 6"/>'),
@@ -567,7 +573,94 @@ class MainWindow(QWidget):
         filters = (None, "text", "link", "img", "path", "color")
         self._clip_type_filter = filters[(filters.index(self._clip_type_filter) + 1) % len(filters)]
         self._update_filter_button()
+        self._filter_transition_generation += 1
+        transition_generation = self._filter_transition_generation
+        self._history_load_generation += 1
+        self._history_render_generation += 1
+        self._filter_transition_load_generation = None
+        self._animate_filter_widgets(
+            0.0,
+            CLIP_FILTER_FADE_OUT_MS,
+            lambda: self._reload_history_after_filter_transition(transition_generation),
+        )
+
+    def _reload_history_after_filter_transition(self, transition_generation):
+        if transition_generation != self._filter_transition_generation:
+            return
         self._request_history_load(self._history_date_filter)
+        self._filter_transition_load_generation = self._history_load_generation
+
+    def _animate_filter_widgets(self, end, duration, finished=None):
+        for animation in self._filter_transition_animations:
+            animation.stop()
+            animation.deleteLater()
+        self._filter_transition_animations = []
+        widgets = list(self.chips_by_content.values())
+        widgets.extend(self._history_placeholders.values())
+        if self.empty_state_widget.isVisible():
+            widgets.append(self.empty_state_widget)
+        if not MOTION_ENABLED or duration <= 0 or not widgets:
+            for widget in widgets:
+                effect = widget.graphicsEffect()
+                if not isinstance(effect, QGraphicsOpacityEffect) and end < 1.0:
+                    effect = QGraphicsOpacityEffect(widget)
+                    widget.setGraphicsEffect(effect)
+                if isinstance(effect, QGraphicsOpacityEffect):
+                    if isinstance(effect, EdgeFadeOpacityEffect):
+                        effect.base_opacity = end
+                    else:
+                        effect.setOpacity(end)
+            if finished:
+                finished()
+            return
+
+        remaining = {"count": len(widgets)}
+
+        def widget_animation_finished(animation):
+            animation.deleteLater()
+            if animation in self._filter_transition_animations:
+                self._filter_transition_animations.remove(animation)
+            remaining["count"] -= 1
+            if remaining["count"] == 0 and finished:
+                finished()
+
+        for widget in widgets:
+            entry_animation = getattr(widget, "_entry_fade_animation", None)
+            if entry_animation is not None:
+                entry_animation.stop()
+            effect = widget.graphicsEffect()
+            if not isinstance(effect, QGraphicsOpacityEffect):
+                effect = QGraphicsOpacityEffect(widget)
+                widget.setGraphicsEffect(effect)
+            opacity_property = (
+                b"base_opacity"
+                if isinstance(effect, EdgeFadeOpacityEffect)
+                else b"opacity"
+            )
+            start_opacity = (
+                effect.base_opacity
+                if isinstance(effect, EdgeFadeOpacityEffect)
+                else effect.opacity()
+            )
+            animation = QPropertyAnimation(effect, opacity_property, self)
+            animation.setDuration(duration)
+            animation.setStartValue(start_opacity)
+            animation.setEndValue(end)
+            animation.setEasingCurve(QEasingCurve.InOutSine)
+            animation.finished.connect(
+                lambda current=animation: widget_animation_finished(current)
+            )
+            self._filter_transition_animations.append(animation)
+            animation.start()
+
+    def _finish_filter_transition(self):
+        if self._filter_transition_load_generation != self._history_load_generation:
+            return
+        self._filter_transition_load_generation = None
+        self._animate_filter_widgets(
+            1.0,
+            CLIP_FILTER_FADE_IN_MS,
+        )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -699,6 +792,7 @@ class MainWindow(QWidget):
             self._history_bulk_rendering = False
             self._history_live_additions = {}
             self._set_history_loading(False)
+            self._finish_filter_transition()
             return
         page_cursor = None
         if records:
@@ -798,6 +892,7 @@ class MainWindow(QWidget):
             self._history_bulk_rendering = False
             self._set_history_loading(False)
             self.update_empty_state()
+            self._finish_filter_transition()
 
     def _set_history_loading(self, loading):
         self._history_loading = bool(loading)
@@ -879,6 +974,7 @@ class MainWindow(QWidget):
         self.scroll.refresh_edge_fades()
         self.update_empty_state()
         self._set_history_loading(False)
+        self._finish_filter_transition()
         if self._history_render_index < len(self._history_records_to_render):
             self._maybe_load_history_page()
         elif not self._history_has_more:
@@ -1179,6 +1275,7 @@ class MainWindow(QWidget):
 
     def update_empty_state(self):
         if hasattr(self, "empty_label"):
+            self.empty_label.setText(self._empty_state_text())
             if self._history_loading:
                 self.empty_state_widget.hide()
                 return
@@ -1190,6 +1287,19 @@ class MainWindow(QWidget):
                     has_chip_widgets = True
                     break
             self.empty_state_widget.setVisible(not self.chips_by_content and not has_chip_widgets)
+
+    def _empty_state_text(self):
+        empty_theme = self.theme.get("empty", {})
+        if not self._clip_type_filter:
+            return empty_theme.get("text", "Nothing Here")
+        labels = {
+            "text": "text",
+            "link": "link",
+            "img": "image",
+            "path": "path",
+            "color": "color",
+        }
+        return f"No {labels.get(self._clip_type_filter, 'matching')} clips"
 
     @safe_slot("Failed to clear unpinned clips")
     def clear_unpinned_clips(self):
@@ -1676,7 +1786,7 @@ class MainWindow(QWidget):
 
     def _apply_empty_theme(self):
         empty_theme = self.theme.get("empty", {})
-        self.empty_label.setText(empty_theme.get("text", "Nothing Here"))
+        self.empty_label.setText(self._empty_state_text())
         self.empty_label.setStyleSheet(f"""
             QLabel {{
                 color: {empty_theme.get("text_color", "rgba(100, 100, 100, 1)")};

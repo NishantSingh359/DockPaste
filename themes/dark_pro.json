@@ -42,7 +42,7 @@
     "open_icon_color": "#606060",
     "icon_color": "#007AFF",
     "folder_icon_color": "#007AFF",
-    "color_preview_border_color": "#252525",
+    "color_preview_border_color": "#505050",
     "thumbnail": {
       "shadow_color": "rgba(0, 0, 0, 0.45)"
     }
