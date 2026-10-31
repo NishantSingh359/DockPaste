@@ -52,7 +52,7 @@
     "border": "#303030",
     "hover": "#202020",
     "text": "#007AFF",
-    "icon_color": "#cecece",
+    "icon_color": "#AEAEAE",
     "destructive_icon_color": "#007AFF"
   },
   "empty": {
@@ -65,9 +65,9 @@
     "border": "rgba(62, 68, 82, 0.75)"
   },
   "text_preview": {
-    "background": "#0c0c0c",
+    "background": "#252525",
     "text": "#cecece",
-    "selection": "#61afef"
+    "selection": "#333333"
   },
   "notification": {
     "background": "#202020",

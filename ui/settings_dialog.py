@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QAbstractItemView,
     QButtonGroup,
-    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFrame,
@@ -1104,8 +1103,6 @@ class SettingsDialog(QDialog):
                 QColor(p["switch_disabled"]),
             )
             switch._disabled_thumb_color = QColor(p["disabled_thumb"])
-        for combo in self.findChildren(MacComboBox):
-            combo.set_theme_colors(p)
         if hasattr(self, "history_loading_ripple"):
             self.history_loading_ripple.set_color(p["accent"])
         selected_theme = (theme or {}).get("name")
@@ -1256,85 +1253,3 @@ class MacSwitch(QCheckBox):
         thumb_size = appearance.SWITCH_THUMB_SIZE
         thumb_y = (self.height() - thumb_size) // 2
         painter.drawEllipse(thumb_x, thumb_y, thumb_size, thumb_size)
-
-
-class MacComboBox(QComboBox):
-    """Draw a restrained macOS-style popup button and keep Qt's native popup."""
-
-    def __init__(self, palette, parent=None):
-        super().__init__(parent)
-        self._theme_palette = dict(palette)
-        self.setObjectName("macCombo")
-        self.setFont(
-            QFont(
-                appearance.FONT_FAMILY,
-                appearance.FONT["control_size"],
-                appearance.FONT["control_weight"],
-            )
-        )
-        self.setMinimumWidth(appearance.DROPDOWN_MIN_SIZE[0])
-        self.setMinimumHeight(appearance.DROPDOWN_MIN_SIZE[1])
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMouseTracking(True)
-        self.setMaxVisibleItems(appearance.DROPDOWN_VISIBLE_ITEMS)
-        self.view().setMouseTracking(True)
-        self.view().viewport().setMouseTracking(True)
-        self.view().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.view().viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.view().setUniformItemSizes(True)
-        self.view().setSpacing(appearance.DROPDOWN_ITEM_SPACING)
-        self.view().setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.view().setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view().setMaximumHeight(appearance.DROPDOWN_MAX_HEIGHT)
-        self.view().setStyleSheet(appearance.dropdown_stylesheet(self._theme_palette))
-        self._hovered = False
-
-    def set_theme_colors(self, palette):
-        self._theme_palette = {**self._theme_palette, **palette}
-        self.view().setStyleSheet(appearance.dropdown_stylesheet(self._theme_palette))
-        self.update()
-
-    def wheelEvent(self, event):
-        if not self.hasFocus():
-            event.ignore()
-            return
-        super().wheelEvent(event)
-
-    def paintEvent(self, event):
-        p = self._theme_palette
-        text_color = QColor(p["text"])
-        muted = QColor(p["control_border"])
-        focus_border = QColor(p["control_focus_border"])
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = self.rect().adjusted(*appearance.DROPDOWN_BORDER_INSET)
-        border = focus_border if self.hasFocus() else QColor(p["control_hover_border"]) if self._hovered else muted
-        painter.setPen(QPen(border, appearance.DROPDOWN_BORDER_WIDTH))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(rect, appearance.DROPDOWN_RADIUS, appearance.DROPDOWN_RADIUS)
-        painter.setPen(text_color)
-        text_rect = self.rect().adjusted(
-            appearance.DROPDOWN_TEXT_INSET,
-            0,
-            -appearance.DROPDOWN_ICON_GAP,
-            0,
-        )
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.currentText())
-        cx = self.width() - appearance.DROPDOWN_ARROW_INSET
-        cy = self.height() // 2
-        half_width = appearance.DROPDOWN_ARROW_HALF_WIDTH
-        half_height = appearance.DROPDOWN_ARROW_HALF_HEIGHT
-        painter.setPen(QPen(text_color, appearance.DROPDOWN_ARROW_STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.drawLine(QPoint(cx - half_width, cy - half_height), QPoint(cx, cy + half_height))
-        painter.drawLine(QPoint(cx, cy + half_height), QPoint(cx + half_width, cy - half_height))
-
-    def enterEvent(self, event):
-        self._hovered = True
-        self.update()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._hovered = False
-        self.update()
-        super().leaveEvent(event)

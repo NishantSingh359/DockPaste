@@ -108,25 +108,6 @@ SWITCH_BORDER_WIDTH = 1
 SWITCH_HOVER_LIGHTEN = 115
 SWITCH_ANIMATION_MS = 150
 
-DROPDOWN_MIN_SIZE = (150, 34)
-DROPDOWN_VISIBLE_ITEMS = 6
-DROPDOWN_MAX_HEIGHT = 252
-DROPDOWN_ITEM_HEIGHT = 34
-DROPDOWN_ITEM_SPACING = 2
-DROPDOWN_RADIUS = 8
-DROPDOWN_LIST_PADDING = 5
-DROPDOWN_ITEM_PADDING = (0, 10)
-DROPDOWN_ITEM_MARGINS = (1, 2)
-DROPDOWN_ITEM_RADIUS = 5
-DROPDOWN_BORDER_INSET = (1, 1, -1, -1)
-DROPDOWN_ICON_GAP = 30
-DROPDOWN_TEXT_INSET = 11
-DROPDOWN_ARROW_INSET = 16
-DROPDOWN_ARROW_HALF_WIDTH = 4
-DROPDOWN_ARROW_HALF_HEIGHT = 2
-DROPDOWN_ARROW_STROKE = 1.6
-DROPDOWN_BORDER_WIDTH = 1
-
 # Semantic settings navigation icon paths.
 NAV_ICON_PATHS = {
     "general": (
@@ -212,7 +193,7 @@ SHELF = {
     "spacing": 5,
     "chip_spacing": 10,
     "filter_spacing": 10,
-    "filter_icon_size": 26,
+    "filter_icon_size": 22,
     "border_width": 2,
     "border_radius": 27,
     "shadow_blur_radius": 10,
@@ -238,6 +219,7 @@ CHIP = {
     "index_font_size": 11,
     "index_font_weight": 700,
     "icon_size": 18,
+    "pinned_indicator_size": 8,
     "icon_font_size": 11,
     "open_icon_path": "assets/icons/open_link.svg",
     "open_icon_size": 18,
@@ -257,7 +239,7 @@ CHIP = {
 }
 
 CONTEXT_MENU = {
-    "border_width": 1,
+    "border_width": 2,
     "border_radius": 50,
     "padding": 6,
     "item_size": 16,
@@ -265,7 +247,7 @@ CONTEXT_MENU = {
     "item_margin": 2,
     "item_border_radius": 7,
     "icon_size": 18,
-    "icon_stroke_width": 1.5,
+    "icon_stroke_width": 2,
     "pin_icon": '<path d=\"M12 17v5\"/><path d=\"M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z\"/>',
     "unpin_icon": '<path d="M12 17v5"/><path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"/><path d="m2 2 20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>',
     "copy_icon": '<rect x="8" y="7" width="11" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/>',
@@ -415,7 +397,6 @@ def settings_stylesheet(palette):
         QSlider#historyDateSlider::handle:horizontal {{ width: 44px; margin: -16px 0; background: transparent; border: none; }}
         QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{ color: {p['text']}; background: {p['control_hover_background']}; border-color: {p['control_hover_border']}; }}
         QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border: {CONTROL_FOCUS_BORDER_WIDTH}px solid {p['control_focus_border']}; }}
-        QComboBox#macCombo {{ padding: 0; border: none; background: transparent; min-height: {DROPDOWN_MIN_SIZE[1]}px; }}
         QLineEdit, QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {{ color: {p['text']}; selection-background-color: {p['accent']}; selection-color: {p['white']}; font-weight: {f['control_weight']}; }}
         QScrollBar:vertical {{ background: {scrollbar_track}; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; border-radius: {SCROLLBAR_RADIUS}px; }}
         QScrollBar::handle:vertical {{ background: {scrollbar_thumb}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; margin: 1px; }}
@@ -435,39 +416,4 @@ def confirmation_stylesheet(palette):
         QMessageBox QPushButton:hover {{ background: {p['surface_hover']}; }}
         QMessageBox QPushButton:focus {{ border-color: {p['control_focus_border']}; outline: none; }}
         QMessageBox QPushButton#confirmClearButton {{ color: {p['danger']}; }}
-    """
-
-
-def dropdown_stylesheet(palette):
-    p = palette
-    scrollbar_track = p.get("scrollbar_track", p["control_background"])
-    scrollbar_thumb = p.get("scrollbar_thumb", p["secondary_text"])
-    scrollbar_thumb_hover = p.get("scrollbar_thumb_hover", p["accent"])
-    return f"""
-        QListView {{
-            color: {p['text']};
-            background: {p['control_background']};
-            border: {DROPDOWN_BORDER_WIDTH}px solid {p['control_border']};
-            border-radius: {DROPDOWN_RADIUS}px;
-            outline: none;
-            padding: {DROPDOWN_LIST_PADDING}px;
-            font-family: {FONT_FAMILY};
-            font-size: {FONT['control_size']}px;
-            font-weight: {FONT['control_weight']};
-        }}
-        QListView::item {{
-            color: {p['text']};
-            height: {DROPDOWN_ITEM_HEIGHT}px;
-            padding: {DROPDOWN_ITEM_PADDING[0]}px {DROPDOWN_ITEM_PADDING[1]}px;
-            margin: {DROPDOWN_ITEM_MARGINS[0]}px {DROPDOWN_ITEM_MARGINS[1]}px;
-            border-radius: {DROPDOWN_ITEM_RADIUS}px;
-        }}
-        QListView::item:hover, QListView::item:selected, QListView::item:focus {{
-            color: {p['white']};
-            background: {p['accent']};
-        }}
-        QScrollBar:vertical {{ background: {scrollbar_track}; width: {SCROLLBAR_WIDTH}px; margin: {SCROLLBAR_MARGIN[0]}px {SCROLLBAR_MARGIN[1]}px; border-radius: {SCROLLBAR_RADIUS}px; }}
-        QScrollBar::handle:vertical {{ background: {scrollbar_thumb}; min-height: {SCROLLBAR_HANDLE_MIN_HEIGHT}px; border-radius: {SCROLLBAR_RADIUS}px; margin: 1px; }}
-        QScrollBar::handle:vertical:hover, QScrollBar::handle:vertical:pressed {{ background: {scrollbar_thumb_hover}; }}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     """

@@ -262,6 +262,13 @@ class ChipWidget(QWidget):
         """)
         self.index_label.hide()
 
+        pin_indicator_size = max(1, int(ui_config.CHIP.get("pinned_indicator_size", 8)))
+        self.pin_indicator = QLabel(self)
+        self.pin_indicator.setObjectName("pinnedClipIndicator")
+        self.pin_indicator.setFixedSize(pin_indicator_size, pin_indicator_size)
+        self.pin_indicator.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.pin_indicator.hide()
+
         self.icon = QLabel(self)
         icon_size = int(chip_theme.get("icon_size", 18))
         self.icon.setFixedSize(icon_size, icon_size)
@@ -302,6 +309,7 @@ class ChipWidget(QWidget):
         self.open_icon.setVisible(self.kind == "LINK")
 
         self.layout.addWidget(self.index_label)
+        self.layout.addWidget(self.pin_indicator)
         self.layout.addWidget(self.icon)
         self.layout.addWidget(self.title)
         self.layout.addWidget(self.open_icon)
@@ -336,6 +344,18 @@ class ChipWidget(QWidget):
                 border-radius: {chip_theme.get("border_radius", 15)}px;
             }}
         """)
+        self._update_pin_indicator()
+
+    def _update_pin_indicator(self):
+        if not hasattr(self, "pin_indicator"):
+            return
+        size = max(1, int(ui_config.CHIP.get("pinned_indicator_size", 8)))
+        accent = self.theme.get("settings", {}).get("accent", "#007AFF")
+        self.pin_indicator.setFixedSize(size, size)
+        self.pin_indicator.setStyleSheet(
+            f"background-color: {accent}; border: none; border-radius: {size // 2}px;"
+        )
+        self.pin_indicator.setVisible(bool(self.pinned))
 
     def set_theme(self, theme):
         self.theme = theme
@@ -427,7 +447,7 @@ class ChipWidget(QWidget):
             self.icon.hide()
 
         visible_widgets = [
-            widget for widget in (self.index_label, self.icon, self.title, self.open_icon)
+            widget for widget in (self.index_label, self.pin_indicator, self.icon, self.title, self.open_icon)
             if not widget.isHidden()
         ]
         margins = self.layout.contentsMargins()
@@ -1039,6 +1059,7 @@ class ChipWidget(QWidget):
         def toggle_pin():
             self.pinned = not self.pinned
             self.apply_style()
+            self.update_label()
             self.pin_requested.emit(self.content)
 
         pin_action = add_icon_action(make_menu_icon(pin_icon, normal_icon_color), toggle_pin)

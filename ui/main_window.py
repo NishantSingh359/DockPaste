@@ -1248,6 +1248,7 @@ class MainWindow(QWidget):
         )
         chip.pinned = bool(pinned)
         chip.apply_style()
+        chip.update_label()
         self._assign_chip_number(chip, clip_index)
         chip.paste_requested.connect(self.paste_clip)
         chip.text_preview_requested.connect(self._show_text_preview)
