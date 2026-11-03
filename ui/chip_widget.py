@@ -573,8 +573,8 @@ class ChipWidget(QWidget):
         chip_theme = self.theme.get("chip", {})
         thumbnail = chip_theme.get("thumbnail", {})
         thumb_size = QSize(
-            int(thumbnail.get("width", 26)),
-            int(thumbnail.get("height", 22)),
+            int(thumbnail.get("width", ui_config.CHIP["thumbnail"]["width"])),
+            int(thumbnail.get("height", ui_config.CHIP["thumbnail"]["height"])),
         )
         self.icon.setFixedSize(thumb_size)
         if self._thumbnail_image is None:
