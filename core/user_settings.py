@@ -21,6 +21,7 @@ from config import (
     SHELF_WIDTH_RATIO,
     SHELF_WIDTH_RATIO_MAX,
     SHELF_WIDTH_RATIO_MIN,
+    SHELF_TOP_MARGIN,
     clip_indexing,
     COLOR_PREVIEW_ENABLED,
 )
@@ -96,6 +97,7 @@ SETTING_SPECS = {
     "shelf_width_ratio": SettingSpec(
         float, SHELF_WIDTH_RATIO, SHELF_WIDTH_RATIO_MIN, SHELF_WIDTH_RATIO_MAX
     ),
+    "shelf_top_margin": SettingSpec(int, SHELF_TOP_MARGIN, 0, 20),
     "shelf_position": SettingSpec(str, "Top"),
     "theme": SettingSpec(str, "dark"),
     "accent_color": SettingSpec(str, "#007AFF"),

@@ -464,6 +464,7 @@ class SettingsDialog(QDialog):
         chip_min_width,
         chip_max_width,
         shelf_width_ratio,
+        shelf_top_margin,
         shelf_position,
         theme_name,
         available_themes,
@@ -492,6 +493,7 @@ class SettingsDialog(QDialog):
         on_chip_min_width,
         on_chip_max_width,
         on_shelf_width_ratio,
+        on_shelf_top_margin,
         on_shelf_position,
         on_history_date,
         on_history_retention_days,
@@ -745,6 +747,14 @@ class SettingsDialog(QDialog):
         self.shelf_width_ratio.setValue(shelf_width_ratio)
         self.shelf_width_ratio.valueChanged.connect(on_shelf_width_ratio)
         self._add_control_row(sizing_card, "Shelf Width", "Shelf width as a proportion of the screen.", self.shelf_width_ratio)
+        self.shelf_top_margin = self._spin(shelf_top_margin, 0, 20, " px")
+        self.shelf_top_margin.valueChanged.connect(on_shelf_top_margin)
+        self._add_control_row(
+            sizing_card,
+            "Shelf Edge Margin",
+            "Set the shelf's distance from the screen edge (0–20 px).",
+            self.shelf_top_margin,
+        )
         self._add_page(appearance_page)
 
         history = self._new_page("History", "Manage saved clipboard history.")

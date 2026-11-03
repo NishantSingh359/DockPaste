@@ -186,7 +186,7 @@ ACCENT_LABELS = ("Blue", "Violet", "Indigo", "Amber", "Coral")
 # Theme JSON files supply all color values.
 SHELF = {
     "height": 52,
-    "top_margin": 14,
+    "top_margin": 6,
     "padding": (9, 0, 9, 0),
     "margin": (0, 0, 0, 0),
     "spacing": 5,

@@ -107,6 +107,7 @@ from config import (
     SHELF_WIDTH_RATIO,
     SHELF_WIDTH_RATIO_MIN,
     SHELF_WIDTH_RATIO_MAX,
+    SHELF_TOP_MARGIN,
     SHELF_AUTO_HIDE_DELAY
 )
 from utils.app_logging import log_exception, safe_slot
@@ -330,6 +331,7 @@ class MainWindow(QWidget):
         self.show_clip_type_filter_enabled = True
         shelf_theme = self.theme.get("shelf", {})
         self.shelf_width_ratio = float(shelf_theme.get("width_ratio", SHELF_WIDTH_RATIO))
+        self.shelf_top_margin = SHELF_TOP_MARGIN
         self.shelf_position = "Top"
         self._next_chip_number = 1
         self._settings_dialog = None
@@ -1952,6 +1954,7 @@ class MainWindow(QWidget):
                 if self.history_retention_days == 30:
                     self.history_retention_days = CLIPBOARD_HISTORY_RETENTION_DAYS
             self.shelf_position = settings["shelf_position"]
+            self.shelf_top_margin = settings["shelf_top_margin"]
             if needs_sizing_defaults_migration:
                 self.chip_min_width = CHIP_MIN_WIDTH
                 self.chip_max_width = CHIP_MAX_WIDTH
@@ -1987,6 +1990,7 @@ class MainWindow(QWidget):
                 "history_retention_days": self.history_retention_days,
                 "history_retention_defaults_version": HISTORY_RETENTION_DEFAULTS_VERSION,
                 "shelf_width_ratio": self.shelf_width_ratio,
+                "shelf_top_margin": self.shelf_top_margin,
                 "shelf_position": self.shelf_position,
                 "theme": self.theme_name,
                 "accent_color": self.accent_color,
@@ -2047,6 +2051,7 @@ class MainWindow(QWidget):
             chip_min_width=self.chip_min_width,
             chip_max_width=self.chip_max_width,
             shelf_width_ratio=self.shelf_width_ratio,
+            shelf_top_margin=self.shelf_top_margin,
             shelf_position=self.shelf_position,
             history_dates=sorted(
                 set(self.clipboard_manager.get_db().get_available_dates())
@@ -2085,6 +2090,7 @@ class MainWindow(QWidget):
             on_chip_min_width=self.set_chip_min_width,
             on_chip_max_width=self.set_chip_max_width,
             on_shelf_width_ratio=self.set_shelf_width_ratio,
+            on_shelf_top_margin=self.set_shelf_top_margin,
             on_shelf_position=self.set_shelf_position,
             on_history_date=self.set_history_date_filter,
             on_history_retention_days=self.set_history_retention_days,
@@ -2188,6 +2194,19 @@ class MainWindow(QWidget):
         if position not in {"Top", "Bottom"} or position == self.shelf_position:
             return
         self.shelf_position = position
+        self._screen_geometry_cache_key = None
+        self.update_screen_geometry("cursor")
+        if self.is_open:
+            self.animate_to(self.open_pos)
+        else:
+            self.move(self.hidden_pos)
+        self._save_context_menu_settings()
+
+    def set_shelf_top_margin(self, margin):
+        margin = max(0, min(20, int(margin)))
+        if margin == self.shelf_top_margin:
+            return
+        self.shelf_top_margin = margin
         self._screen_geometry_cache_key = None
         self.update_screen_geometry("cursor")
         if self.is_open:
@@ -2491,7 +2510,7 @@ class MainWindow(QWidget):
         width = min(width, geometry.width() - 32)
 
         shelf_height = int(self.theme.get("shelf", {}).get("height", 52))
-        shelf_top_margin = int(self.theme.get("shelf", {}).get("top_margin", 6))
+        shelf_top_margin = self.shelf_top_margin
         window_width = width + self._shadow_margin * 2
         window_height = shelf_height + self._shadow_margin * 2
         window_size = QSize(window_width, window_height)
