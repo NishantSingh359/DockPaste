@@ -31,8 +31,8 @@ CLIP_FILTER_FADE_IN_MS = 240
 
 CHIP_SCROLL_SPEED = 3
 CHIP_SCROLL_SPEED_MIN = 1
-CHIP_SCROLL_SPEED_MAX = 10
-CHIP_SCROLL_DURATION_MS = 500
+CHIP_SCROLL_SPEED_MAX = 8
+CHIP_SCROLL_DURATION_MS = 300
 
 
 # -----------------------------------------------------------------------------
