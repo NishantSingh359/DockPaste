@@ -12,7 +12,6 @@ from pathlib import Path
 WINDOW_TITLE = "Settings"
 WINDOW_SIZE = (1000, 900)
 WINDOW_MIN_SIZE = (900, 770)
-WINDOW_MAX_SIZE = (1200, 1100)
 ROOT_MARGINS = (12, 12, 12, 12)
 ROOT_SPACING = 12
 FONT_FAMILY = "Inter"
@@ -187,7 +186,7 @@ ACCENT_LABELS = ("Blue", "Violet", "Indigo", "Amber", "Coral")
 # Theme JSON files supply all color values.
 SHELF = {
     "height": 52,
-    "top_margin": 6,
+    "top_margin": 14,
     "padding": (9, 0, 9, 0),
     "margin": (0, 0, 0, 0),
     "spacing": 5,

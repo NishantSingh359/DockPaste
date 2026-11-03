@@ -502,6 +502,8 @@ class SettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self._theme_palette = dict(theme["settings"])
         self._accent_color = accent_color
         self._theme_previews = dict(theme_previews)
@@ -904,16 +906,12 @@ class SettingsDialog(QDialog):
         self._add_page(about)
 
         self.set_theme(theme)
-        self.setMaximumSize(*appearance.WINDOW_MAX_SIZE)
         primary_screen = QApplication.primaryScreen()
         if primary_screen is not None:
             available_geometry = primary_screen.availableGeometry()
-            max_width = min(appearance.WINDOW_MAX_SIZE[0], available_geometry.width())
-            max_height = min(appearance.WINDOW_MAX_SIZE[1], available_geometry.height())
-            self.setMaximumSize(max_width, max_height)
             self.setMinimumSize(
-                min(appearance.WINDOW_MIN_SIZE[0], max_width),
-                min(appearance.WINDOW_MIN_SIZE[1], max_height),
+                min(appearance.WINDOW_MIN_SIZE[0], available_geometry.width()),
+                min(appearance.WINDOW_MIN_SIZE[1], available_geometry.height()),
             )
             self.resize(
                 min(appearance.WINDOW_SIZE[0], available_geometry.width()),
