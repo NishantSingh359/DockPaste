@@ -179,7 +179,15 @@ ACCENT_PICKER = {
     "label_size": 10,
     "label_gap": 5,
 }
-ACCENT_LABELS = ("Blue", "Violet", "Indigo", "Amber", "Coral")
+ACCENT_LABELS = (
+    "Blue",
+    "Purple",
+    "Indigo",
+    "Amber",
+    "Jade",
+    "Leaf Green",
+    "Teal",
+)
 
 
 # Shared non-color appearance settings for the shelf and its contents.
@@ -227,7 +235,7 @@ CHIP = {
     "favicon_size": 22,
     "folder_icon_size": 22,
     "color_preview_size": 22,
-    "color_preview_border_width": 1,
+    "color_preview_border_width": 0,
     "thumbnail": {
         "width": 48,
         "height": 26,

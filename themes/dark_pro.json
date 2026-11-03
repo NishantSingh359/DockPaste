@@ -1,7 +1,7 @@
 {
   "name": "dark_pro",
   "display_name": "Dark Pro",
-  "accent_options": ["#007AFF", "#6155F5", "#4E5DC6", "#7AB94D", "#FF6C3A"],
+  "accent_options": ["#007AFF", "#9C00BF", "#6155F5", "#E49A00", "#0ABE75", "#7AB94D", "#00B5AD"],
   "settings": {
     "background": "#0c0c0c",
     "surface": "#202020",
@@ -15,11 +15,11 @@
     "scrollbar_track": "#0c0c0c",
     "scrollbar_thumb": "#202020",
     "scrollbar_thumb_hover": "#444444",
-    "text": "#cecece",
+    "text": "#dadada",
     "secondary_text": "#909090",
     "accent": "#007AFF",
     "danger": "#DE5C5C",
-    "white": "#cecece",
+    "white": "#dadada",
     "switch_off": "#303030",
     "switch_disabled": "#292929",
     "disabled_thumb": "#989898"
@@ -37,7 +37,7 @@
     "pinned": "#252525",
     "pinned_border": "#252525",
     "pressed": "#252525",
-    "text": "#cecece",
+    "text": "#dadada",
     "index": "#606060",
     "open_icon_color": "#606060",
     "icon_color": "#007AFF",
