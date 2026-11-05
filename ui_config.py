@@ -185,7 +185,7 @@ ACCENT_LABELS = (
     "Indigo",
     "Amber",
     "Jade",
-    "Leaf Green",
+    "Green",
     "Teal",
 )
 
