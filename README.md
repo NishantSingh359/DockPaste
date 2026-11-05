@@ -6,46 +6,69 @@ DockPaste is still a work in progress, so you might run into a few bugs or unfin
 
 ## About
 
-I’m not a software developer, and I started DockPaste with no app development experience. The idea came to me, and I shaped it into an app as I learned along the way. I’m sharing it openly so anyone can help fix bugs, solve problems, and make DockPaste better.
+I started DockPaste with no app development experience. The idea came to me, and I shaped it into an app as I learned along the way. I’m sharing it openly so anyone can help fix bugs, solve problems, and make DockPaste better.
 
 ## Features
 
-- **No clip-count limit:** Store any number of clips. History loads in pages to keep browsing responsive.
-- Automatically saves copied text, links, file, folders, images, and screenshots to local history.
-- Shows clips as compact chips in a floating shelf. Click a chip to paste it into the active app.
+- Store unlimited number of clips.
+- Automatically saves copied text, links, file, folders, images, and screenshots.
 - Drag and drop text, links, files, folders and images into the shelf.
+- Click/drag and drop clips to paste it into the active app.
 - Pin clips, delete individual clips, or clear all unpinned clips.
-- Browse history by copy date. History is stored between app launches.
-- Choose how long to keep history in Settings (1–30 days; 10 days by default). Expired clips, including pinned clips, are removed automatically.
-- Preview text or open copied images on double-click, with separate settings for each.
 - Show color previews and website favicons on supported clips.
-- Configure the shelf to appear on hover, hide after pasting, or keep running in the system tray.
-- Set a Windows startup option, adjust shelf size, and choose from multiple themes.
+- Preview text or open copied images on double-click.
+- Browse history by copy date.
+- Adjust shelf size and clips size.
 - Optionally skip text and image items larger than 5 MB and show a warning when an item is skipped. Ordinary files and folders are stored as paths and are exempt from this size limit.
+- Choose how long to keep history in Settings (1–30 days; 10 days by default). Expired clips, including pinned clips, are removed automatically.
 - On Windows, press **Ctrl + Win** to pin or unpin the shelf.
 
-### Preview Text
-*Double-click to preview text*
-![alt text](doc/text_preview.png)
+## DockPaste
+![alt text](doc/dockpaste.png)
 
-### Preview Images
-*Double-click to preview image*
-![alt text](doc/image_preview.png)
-## Themes
+---
+## Pin/Uppin
+![alt text](doc/pin.png)
 
-### Dark
-![Dark theme](doc/dark.png)
+---
+## Filter
 
-### One Dark Pro Night Flat
-![One Dark Pro Night Flat theme](doc/one_dark_pro_night_flat.png)
+### Texts
+![alt text](doc/text.png)
 
-### Dracula
-![Dracula theme](doc/dracula.png)
+### Links
+![alt text](doc/link.png)
 
+### Screen-shots
+![alt text](doc/img.png)
+
+### Files/Folders/Images
+![alt text](doc/doc.png)
+
+---
+## Preview
+
+### Text
+![alt text](doc/pre_text.png)
+
+## Image
+![alt text](doc/pre_img.png)
+
+---
 ## Settings
 
-![DockPaste settings](doc/settings.png)
+### General
+![alt text](doc/settings1.png)
 
+### Apperance
+![alt text](doc/settings2.png)
+
+### History
+![alt text](doc/settings3.png)
+
+
+
+---
 ## Install on Windows
 
 1. Open the [latest GitHub release](https://github.com/NishantSingh359/DockPaste/releases).
@@ -54,10 +77,12 @@ I’m not a software developer, and I started DockPaste with no app development 
 
 DockPaste currently provides a Windows installer for 64-bit Windows 10 and Windows 11.
 
-### Windows SmartScreen
+---
+## Windows SmartScreen
 
 Because DockPaste is an unsigned indie and open-source app, Windows may display “Windows protected your PC.” If you trust the installer, select **More info**, then **Run anyway**.
 
+---
 ## Privacy
 
 Clipboard history and settings are stored locally on your device. DockPaste does not sync clipboard data to the cloud or include telemetry. When link favicons or copied remote images are used, DockPaste may contact the corresponding website to retrieve them. Old history is removed automatically according to the retention setting.
